@@ -10,8 +10,10 @@ readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.11"
 dependencies = [
+    "claude-session-commons",
     "textual>=0.40",
     "numpy",
+    "mcp>=1.0",
 ]
 
 [project.optional-dependencies]
@@ -22,3 +24,4 @@ train = [
 
 [project.scripts]
 claude-resume = "claude_resume.cli:main"
+claude-resume-mcp = "claude_resume.mcp_server:main"

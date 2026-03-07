@@ -83,13 +83,61 @@ claude-resume --cache-all  # Pre-index all sessions (background, slow)
 | `b` | Toggle automated/bot sessions |
 | `Esc` | Quit |
 
+## Session Bookmarks
+
+By default, claude-resume infers session state from AI summaries — it guesses whether you finished, crashed, or got stuck. Bookmarks replace guessing with ground truth.
+
+Run `/bookmark` inside any Claude Code session before you close it. It captures:
+
+- **Lifecycle state** — done, paused, blocked, or handing off
+- **Next actions** — what you (or the next person) should do first
+- **Blockers** — what's preventing progress
+- **Confidence** — how stable the current state is
+- **Workspace snapshot** — git status, uncommitted files, current branch
+
+Bookmarked sessions show a colored badge in the TUI list:
+
+| Badge | Meaning |
+|-------|---------|
+| `DONE` (green) | Work is complete |
+| `PAUSED` (yellow) | Intentional stop, will return |
+| `BLOCKED` (red) | Can't proceed, external dependency |
+| `HANDOFF` (cyan) | Someone else is taking over |
+| `AUTO` (dim) | Session closed without explicit bookmark |
+
+The preview pane shows bookmark data — next actions, blockers, confidence — below the AI summary. The `x` export includes it in the markdown briefing.
+
+Sessions without bookmarks work exactly as before (AI-inferred state). Bookmarks are additive — they enrich, they don't replace.
+
+### How bookmarks get created
+
+1. **`/bookmark`** — You type this in Claude Code. It asks which state, captures context in <30 seconds.
+2. **`/bookmark done`** — Skip the prompt, go straight to a specific state (`done`, `pause`, `blocked`, `handoff`).
+3. **Auto-bookmark** — A `Stop` hook captures minimal workspace state when you close a session without bookmarking. Better than nothing.
+
+### How bookmarks affect sorting
+
+Bookmarked sessions get lifecycle-aware interruption scores:
+
+- `done` → score 0 (no urgency, sorts to bottom)
+- `blocked` → score 70 (needs attention, sorts high)
+- `paused` → minimum score 20 (low urgency)
+- `auto-closed` → normal heuristic scoring
+
+### Setup
+
+The `/bookmark` skill lives at `~/.claude/skills/bookmark/SKILL.md`. The auto-bookmark hook lives at `~/.claude/hooks/session_bookmark_auto.sh`. Both are installed alongside this repo — see the [install instructions](#install).
+
+Bookmark data is stored in the same `~/.claude/resume-summaries/` cache that claude-resume already reads from (as a `bookmark` field in each session's JSON). A backup goes to devlog for cross-machine durability.
+
 ## How It Works
 
 1. Scans `~/.claude/projects/` for JSONL session files
-2. Scores each by interruption severity — sessions that crashed mid-tool-use go first
+2. Scores each by interruption severity — sessions that crashed mid-tool-use go first, bookmarked sessions use lifecycle-aware scoring
 3. Summarizes each via `claude -p` (Haiku for speed, cached after first run)
 4. Classifies sessions as interactive or automated using a trained ML model — automated sessions (CI, scripts, subagents) are hidden by default
-5. Presents everything in a [Textual](https://textual.textualize.io/) TUI
+5. Surfaces bookmark data (lifecycle badges, next actions, blockers) when present
+6. Presents everything in a [Textual](https://textual.textualize.io/) TUI
 
 Summaries are cached in `~/.claude/resume-summaries/`. Second launch is instant.
 
@@ -106,12 +154,13 @@ python train_classifier.py
 
 ## Roadmap
 
-All four launch features are implemented:
+All five launch features are implemented:
 
 - [x] [**Resume directly**](https://github.com/rhea-impact/claude-resume/issues/1) — `r` to exec into a session
 - [x] [**Multi-select workspace recovery**](https://github.com/rhea-impact/claude-resume/issues/2) — Space to select, Enter/r to open all in iTerm tabs
 - [x] [**Smart sort by interruption**](https://github.com/rhea-impact/claude-resume/issues/3) — sessions scored by how interrupted they look
 - [x] [**Export context briefing**](https://github.com/rhea-impact/claude-resume/issues/4) — `x` to copy markdown briefing to clipboard
+- [x] **Session bookmarks** — `/bookmark` in Claude Code to capture lifecycle state, displayed as badges in the TUI
 
 ## License
 
