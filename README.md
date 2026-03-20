@@ -29,6 +29,8 @@ Two things, independently useful:
 1. **TUI** — A terminal interface for crash recovery. Launches instantly, shows recent sessions with AI summaries, lets you arrow to the one you want and hit `r` to resume.
 2. **MCP server** — Gives Claude (or any MCP client) tools to search, read, and reason over your full session history. "Find the session where we built the auth middleware." It searches 5,000+ sessions in ~3 seconds.
 
+![claude-resume TUI](assets/tui.png)
+
 ## Examples
 
 We built **Eidos**, a multi-agent AI system. In [our benchmark](https://github.com/eidos-agi/cockpit-eidos), Eidos outperformed **Claude Opus 4.6** by **3.6x** in both accuracy and speed on complex tasks with 15+ reasoning chains. Below, we use Claude Resume to pick up where we left off across multiple sessions.
