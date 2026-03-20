@@ -85,7 +85,7 @@ _TOOL_BARE = {
     "session_data_science",
 }
 # Claude Code prefixes MCP tool names with mcp__<server>__<tool>
-RESUME_TOOLS = _TOOL_BARE | {f"mcp__claude-resume__{t}" for t in _TOOL_BARE}
+RESUME_TOOLS = _TOOL_BARE | {f"mcp__resume-resume__{t}" for t in _TOOL_BARE}
 
 
 # ── Data collection ─────────────────────────────────────────────────────────────
@@ -202,8 +202,8 @@ def main():
     print("\nScanning ALL sessions for claude-resume MCP calls…")
     tool_counts = scan_all_sessions_for_mcp_usage()
 
-    searches    = tool_counts.get("search_sessions", 0) + tool_counts.get("mcp__claude-resume__search_sessions", 0)
-    merges      = tool_counts.get("merge_context", 0)   + tool_counts.get("mcp__claude-resume__merge_context", 0)
+    searches    = tool_counts.get("search_sessions", 0) + tool_counts.get("mcp__resume-resume__search_sessions", 0)
+    merges      = tool_counts.get("merge_context", 0)   + tool_counts.get("mcp__resume-resume__merge_context", 0)
     total_calls = sum(tool_counts.values())
 
     print(f"\n  Total claude-resume MCP calls found: {total_calls:,}")

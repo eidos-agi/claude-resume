@@ -1,10 +1,10 @@
 # How We Made 30,000 Session Search 200x Faster (And Proved It)
 
-![claude-resume — search performance benchmark](perf-benchmark.png)
+![resume-resume — search performance benchmark](perf-benchmark.png)
 
 The naive implementation works fine at 100 sessions. It collapses at 30,000.
 
-When claude-resume first shipped, search read every session file directly — open the JSONL, parse the JSON, scan the text, move on. That works when you have a few hundred sessions. It does not work when you have 30,242 of them.
+When resume-resume first shipped, search read every session file directly — open the JSONL, parse the JSON, scan the text, move on. That works when you have a few hundred sessions. It does not work when you have 30,242 of them.
 
 We had 30,242 of them.
 
@@ -20,7 +20,7 @@ The root cause was simple: we were reading the wrong files.
 
 Each raw session is a JSONL file — a full conversation transcript, including every tool call, every result, every token of output. Average size: **2MB**. Reading 30,000 of them is 60GB of I/O before you've done a single character of text search.
 
-The fix was already on disk. claude-resume generates a compressed summary for every session — goal, key decisions, files touched, outcome. Average size: **2KB**. A 1,000:1 ratio.
+The fix was already on disk. resume-resume generates a compressed summary for every session — goal, key decisions, files touched, outcome. Average size: **2KB**. A 1,000:1 ratio.
 
 The optimization: bulk-load all `~/.claude/resume-summaries/*.json` **once**, before ThreadPoolExecutor spins up, instead of reading raw JSONL per-thread.
 
@@ -107,8 +107,8 @@ That's the insight. It's not new. It's what database indexes are. It's what cach
 Free. Open source. MIT. The benchmarks are in the test suite — run them yourself.
 
 ```bash
-pip install claude-resume
-claude mcp add claude-resume -- claude-resume-mcp
+pip install resume-resume
+claude mcp add resume-resume -- resume-resume-mcp
 ```
 
 Your 30,000 sessions are searchable in under a second. Every one of them.
@@ -116,5 +116,5 @@ Your 30,000 sessions are searchable in under a second. Every one of them.
 ---
 
 *Daniel Shanklin — Director of AI, AIC Holdings | Patented AI Engineer / AGI Researcher | MIT*
-*[eidos-agi/claude-resume](https://github.com/eidos-agi/claude-resume) — part of the Eidos forge ecosystem*
+*[eidos-agi/resume-resume](https://github.com/eidos-agi/resume-resume) — part of the Eidos forge ecosystem*
 *Article 1: [The Re-Entry Tax Is Destroying Your AI Productivity](linkedin-article.md)*

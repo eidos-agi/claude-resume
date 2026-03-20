@@ -29,7 +29,7 @@ from .sessions import (
 from claude_session_commons import decode_project_path
 from .summarize import summarize_quick, summarize_deep, summarize_insight, auto_tier
 
-mcp = FastMCP("claude-resume")
+mcp = FastMCP("resume-resume")
 
 _cache = SessionCache()
 
@@ -1291,8 +1291,8 @@ def main():
     if "--install" in sys.argv:
         snippet = {
             "mcpServers": {
-                "claude-resume": {
-                    "command": "claude-resume-mcp",
+                "resume-resume": {
+                    "command": "resume-resume-mcp",
                     "args": [],
                 }
             }

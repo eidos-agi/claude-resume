@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="assets/logo.png" alt="claude-resume" width="480"/>
+  <img src="assets/logo.png" alt="resume-resume" width="480"/>
 </p>
 
-# claude-resume
+# resume-resume
 
 **New free tool we're dropping.**
 
@@ -21,8 +21,8 @@
 Add it to Claude Code and every session on your machine can search, read, and merge your full session history — in plain English.
 
 ```bash
-pip install claude-resume
-claude mcp add claude-resume -- claude-resume-mcp
+pip install resume-resume
+claude mcp add resume-resume -- resume-resume-mcp
 ```
 
 Or manually in your MCP config:
@@ -30,8 +30,8 @@ Or manually in your MCP config:
 ```json
 {
   "mcpServers": {
-    "claude-resume": {
-      "command": "claude-resume-mcp"
+    "resume-resume": {
+      "command": "resume-resume-mcp"
     }
   }
 }
@@ -41,13 +41,13 @@ We built **Eidos**, a multi-agent AI system. In [our benchmark](https://github.c
 
 ### Finding the benchmark where Eidos beat Claude Opus 4.6
 
-> *"use claude-resume to find the eidos test where we beat claude"*
+> *"use resume-resume to find the eidos test where we beat claude"*
 
 ![Claude Resume eidos benchmark search](assets/example-eidos-beat.png)
 
 ### Searching for a past session in plain English
 
-> *"use claude-resume to find the latest chats about eidos philosophy docs"*
+> *"use resume-resume to find the latest chats about eidos philosophy docs"*
 
 ![Claude Resume search example](assets/example-search.png)
 
@@ -82,13 +82,13 @@ Two sessions — one about eidos-philosophy doc changes (Mar 14) and one with a 
 For when your machine died and you just need to get back to work.
 
 ```bash
-pip install claude-resume
-claude-resume        # last 4 hours
+pip install resume-resume
+resume-resume        # last 4 hours
 cr 24                # last 24 hours
 cr --all             # everything
 ```
 
-![claude-resume TUI](assets/tui.png)
+![resume-resume TUI](assets/tui.png)
 
 | Key | Action |
 |-----|--------|
@@ -121,7 +121,7 @@ Run `/bookmark` inside any Claude Code session to capture lifecycle state (`done
 ## Related
 
 - [claude-session-commons](https://github.com/eidos-agi/claude-session-commons) — Shared session parsing, caching, and classification used by this repo and others
-- [claude-resume-duet](https://github.com/eidos-agi/claude-resume-duet) — Web UI companion with session browser and `claude-resume://` URL scheme handler
+- [claude-resume-duet](https://github.com/eidos-agi/claude-resume-duet) — Web UI companion with session browser and `resume-resume://` URL scheme handler
 
 ## License
 

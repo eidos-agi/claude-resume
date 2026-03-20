@@ -1,4 +1,4 @@
-# claude-resume — Marketing Video Storyboard
+# resume-resume — Marketing Video Storyboard
 
 **Runtime**: ~60–90 seconds
 **Style**: Dark terminal aesthetic, cinematic text reveals, ambient electronic music
@@ -39,15 +39,15 @@
 
 ## Scene 2 — The Tool (0:15–0:30)
 
-**Visual**: The claude-resume logo appears — circuit → play button, glowing.
+**Visual**: The resume-resume logo appears — circuit → play button, glowing.
 
 **Text**:
-> claude-resume
+> resume-resume
 > Pick up where you left off.
 
 **Cut to**: Real terminal. User types:
 ```
-use claude-resume to find the eidos test where we beat claude
+use resume-resume to find the eidos test where we beat claude
 ```
 
 **Show**: The search running. 3 seconds. Results appear. Exact session found.
@@ -63,7 +63,7 @@ use claude-resume to find the eidos test where we beat claude
 
 ## Scene 3 — The Speed Story (0:30–0:50)
 
-**Visual**: Split screen. Left: old way (scrolling through files, grep commands, frustration). Right: claude-resume search, instant.
+**Visual**: Split screen. Left: old way (scrolling through files, grep commands, frustration). Right: resume-resume search, instant.
 
 **Text counter animation** (numbers counting up fast then stopping):
 > 30,242 sessions scanned
@@ -87,7 +87,7 @@ use claude-resume to find the eidos test where we beat claude
 
 **Visual**: User types:
 ```
-use claude-resume to merge the march 14th conversations
+use resume-resume to merge the march 14th conversations
 and Eidos v5 Pipeline Telemetry from march 11th
 ```
 
@@ -112,7 +112,7 @@ and Eidos v5 Pipeline Telemetry from march 11th
 
 **Text**:
 > We built Eidos on this principle.
-> claude-resume applies it to your sessions.
+> resume-resume applies it to your sessions.
 
 **Small text**:
 > Eidos outperformed Claude Opus 4.6 by 3.6x.
@@ -125,20 +125,20 @@ and Eidos v5 Pipeline Telemetry from march 11th
 **Visual**: Terminal. Clean. Two commands appear one at a time:
 
 ```bash
-pip install claude-resume
+pip install resume-resume
 ```
 *(pause)*
 ```bash
-claude mcp add claude-resume -- claude-resume-mcp
+claude mcp add resume-resume -- resume-resume-mcp
 ```
 
 **Text**:
 > Free. Open source. MIT.
 
-**Logo hold**: claude-resume logo. Eidos AGI mark beneath it.
+**Logo hold**: resume-resume logo. Eidos AGI mark beneath it.
 
 **URL**:
-> github.com/eidos-agi/claude-resume
+> github.com/eidos-agi/resume-resume
 
 **Sound**: Music resolves to single soft chord. Fade out.
 
@@ -157,7 +157,7 @@ claude mcp add claude-resume -- claude-resume-mcp
 - Transitions: Typewriter for code blocks, fade-in for prose, counter animation for numbers
 
 ### Terminal Footage
-- Use actual claude-resume terminal sessions (record with `asciinema`, render with `svg-term`)
+- Use actual resume-resume terminal sessions (record with `asciinema`, render with `svg-term`)
 - Real data is more credible than mockups — the 0.604s timing is a real benchmark
 
 ### Duration Variants
@@ -168,4 +168,4 @@ claude mcp add claude-resume -- claude-resume-mcp
 ---
 
 *Daniel Shanklin — Director of AI, AIC Holdings*
-*eidos-agi/claude-resume*
+*eidos-agi/resume-resume*

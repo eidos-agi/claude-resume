@@ -38,7 +38,7 @@ The forges work the same way. Each forge exposes capabilities through a standard
 
 But USB has a property that makes it more than just a connector standard: devices can be hot-swapped. You can unplug a keyboard and plug in a drive without rebooting. The system adapts dynamically to whatever is connected.
 
-The forges have this property too. A forge's source (where its input comes from) and destination (where its output goes) can change without changing the forge itself. claude-resume can feed context into a planning agent today and a code review agent tomorrow. Helios can automate a browser for a human operator today and for an autonomous agent tomorrow. Railguey can deploy a service triggered by a human command today and by a CI pipeline tomorrow. The capability is constant. The wiring is dynamic. The agent at the center decides what to plug in.
+The forges have this property too. A forge's source (where its input comes from) and destination (where its output goes) can change without changing the forge itself. resume-resume can feed context into a planning agent today and a code review agent tomorrow. Helios can automate a browser for a human operator today and for an autonomous agent tomorrow. Railguey can deploy a service triggered by a human command today and by a CI pipeline tomorrow. The capability is constant. The wiring is dynamic. The agent at the center decides what to plug in.
 
 This is what makes the pattern interesting in the age of AI. The consumer is increasingly an AI agent, and AI agents compose tools differently than humans do. A human uses 2-3 tools per task because the cognitive overhead of coordination is too high. An AI agent might use 15 tools in a single workflow because coordination is free. Tools that are designed for this kind of chaining — small, focused, stateless, with structured output — become exponentially more powerful as the agent using them gets smarter.
 
@@ -46,15 +46,15 @@ The forges are designed for exactly this. Each one is a capability with a plug. 
 
 ---
 
-## Part II: claude-resume — The First Forge
+## Part II: resume-resume — The First Forge
 
 ### Where It Started
 
-claude-resume is where the forge pattern crystallized. It didn't start as a forge. It started as a crash recovery tool — the kind of narrow, specific utility that solves exactly one problem.
+resume-resume is where the forge pattern crystallized. It didn't start as a forge. It started as a crash recovery tool — the kind of narrow, specific utility that solves exactly one problem.
 
 The problem: your Mac kernel panics. You reboot. You had three Claude Code sessions open across different projects. Which ones? What were they doing? Where did they leave off? Claude Code stores session data as JSONL files in `~/.claude/projects/`, but good luck browsing thousands of sessions to find the three that matter.
 
-So claude-resume was built as a terminal UI. It scans the session files, generates AI summaries of what each session was doing, scores them by interruption severity, classifies human sessions versus automated ones (using a gradient boosting model trained on 3,800 labeled sessions), and presents everything in a navigable TUI. You arrow to the session you want, hit `r`, and you're back in it.
+So resume-resume was built as a terminal UI. It scans the session files, generates AI summaries of what each session was doing, scores them by interruption severity, classifies human sessions versus automated ones (using a gradient boosting model trained on 3,800 labeled sessions), and presents everything in a navigable TUI. You arrow to the session you want, hit `r`, and you're back in it.
 
 That's a product. It solves a product problem.
 
@@ -64,7 +64,7 @@ But as the session operations were built — searching, parsing, summarizing, sc
 
 A planning agent could search past sessions to find prior work on a topic before proposing an implementation. A handoff skill could pull context from a session to prepare a briefing. A boot-up routine could check for interrupted sessions before starting new work. A research workflow could merge findings from one session into another.
 
-None of these workflows need a terminal UI. They need the operations underneath it. So claude-resume split into two layers:
+None of these workflows need a terminal UI. They need the operations underneath it. So resume-resume split into two layers:
 
 1. **The TUI** — a human-facing terminal interface for crash recovery. This is the product.
 2. **The MCP server** — a machine-facing API exposing session operations as tools. This is the forge.
@@ -95,21 +95,21 @@ The MCP server exposes nine core tools plus a data science tier:
 
 ### Fork and Merge: Version Control for Conversations
 
-The conceptual heart of claude-resume is two operations borrowed from version control:
+The conceptual heart of resume-resume is two operations borrowed from version control:
 
-**Fork** creates a new independent session from an existing one. Full conversation history, fresh session ID. The original stays untouched. This uses Claude Code's native `--fork-session` flag — claude-resume discovered it and integrated it rather than building custom context piping, because the native approach gives full history and is maintained by the Claude Code team.
+**Fork** creates a new independent session from an existing one. Full conversation history, fresh session ID. The original stays untouched. This uses Claude Code's native `--fork-session` flag — resume-resume discovered it and integrated it rather than building custom context piping, because the native approach gives full history and is maintained by the Claude Code team.
 
 **Merge** pulls context from one session into another. Unlike fork (which creates a new session), merge enriches an existing session with knowledge from elsewhere. The keyword filter makes it surgical — you can import only the messages about the database schema, not the entire 200-message session.
 
 These operations break the fundamental limitation of Claude Code sessions: isolation. Before merge, each session was a clean room. No session could access another session's knowledge. Merge turns sessions from isolated rooms into a connected graph where context flows between them.
 
-This is the forge pattern in action. claude-resume doesn't know if merge is being called by a human who wants yesterday's research, by a planning agent preparing context for implementation, by a handoff skill building a briefing, or by a crash recovery workflow rebuilding state. The forge provides the capability. The caller provides the purpose.
+This is the forge pattern in action. resume-resume doesn't know if merge is being called by a human who wants yesterday's research, by a planning agent preparing context for implementation, by a handoff skill building a briefing, or by a crash recovery workflow rebuilding state. The forge provides the capability. The caller provides the purpose.
 
-### Why claude-resume Is the First Forge
+### Why resume-resume Is the First Forge
 
-claude-resume crystallized the forge pattern because it was the first tool where the split between product and plug became explicit. The TUI is a product — it has a specific user, a specific workflow, a specific problem. The MCP server is a plug — it has no specific user, no specific workflow, no specific problem. It provides capabilities that any consumer can compose however they need.
+resume-resume crystallized the forge pattern because it was the first tool where the split between product and plug became explicit. The TUI is a product — it has a specific user, a specific workflow, a specific problem. The MCP server is a plug — it has no specific user, no specific workflow, no specific problem. It provides capabilities that any consumer can compose however they need.
 
-Every forge built after claude-resume follows the same split: a focused capability exposed through a standard interface, with no assumptions about context. claude-resume proved that this pattern works — that a tool can be both a useful product for humans and a composable capability for AI agents, without compromise in either direction.
+Every forge built after resume-resume follows the same split: a focused capability exposed through a standard interface, with no assumptions about context. resume-resume proved that this pattern works — that a tool can be both a useful product for humans and a composable capability for AI agents, without compromise in either direction.
 
 ---
 
@@ -279,14 +279,14 @@ Eidos is building toward a three-tier memory architecture that maps directly to 
 #### Ephemeral Memory
 Working memory. The current context window. What the agent is thinking about right now. This is the cheapest memory — it exists only for the duration of the current task and is discarded when the task completes. Every Claude Code session's conversation history is ephemeral memory. It's rich, detailed, and temporary.
 
-claude-resume's `merge_context` tool is a bridge between ephemeral memories. It takes the ephemeral memory of one session (the conversation) and injects selected portions into the ephemeral memory of another session. Without this bridge, ephemeral memories are isolated — they die when the session ends. With it, the most important pieces survive by being transferred.
+resume-resume's `merge_context` tool is a bridge between ephemeral memories. It takes the ephemeral memory of one session (the conversation) and injects selected portions into the ephemeral memory of another session. Without this bridge, ephemeral memories are isolated — they die when the session ends. With it, the most important pieces survive by being transferred.
 
 #### Episodic Memory
 PEFM-weighted records of specific experiences. "I tried approach A on this kind of problem and it failed because of X." "The auth token refresh bug was caused by a race condition in the retry logic." These are memories of specific events, not general knowledge. They carry emotional weight, they decay, they're reinforced by usage.
 
 Episodic memory is where the loop's LEARN step writes to. Every task execution creates an episode: what was attempted, what happened, whether it succeeded, what was learned. These episodes are retrievable by future tasks through the ensembled search (BM25 + vector + keyword, fused by RRF, reranked by PEFM salience).
 
-The forges contribute to episodic memory through devlogs, bookmarks, and cached summaries. claude-resume's session summaries are episodic memories of entire sessions. Helios's site knowledge entries are episodic memories of browser interactions. KB's indexed artifacts are episodic memories of organizational decisions.
+The forges contribute to episodic memory through devlogs, bookmarks, and cached summaries. resume-resume's session summaries are episodic memories of entire sessions. Helios's site knowledge entries are episodic memories of browser interactions. KB's indexed artifacts are episodic memories of organizational decisions.
 
 #### Long-term Memory
 Consolidated knowledge that has been abstracted from specific episodes into general patterns. "When dealing with auth token refresh, always check for race conditions in the retry logic." This is knowledge that has been generalized — it applies beyond the specific episode that generated it.
@@ -404,7 +404,7 @@ The forges aren't standalone tools that happen to share a GitHub organization. T
 
 The robot is Eidos. The forges are its capabilities. The loop is its cognition. The Pod is its judgment. PEFM is its memory. And the key property — the thing that makes it different from every other AI system — is that the capabilities are hot-swappable.
 
-When Eidos encounters a task that requires browser automation, it plugs in Helios. When it encounters a task that requires deployment, it plugs in Railguey. When it encounters a task that requires session context, it plugs in claude-resume. When it encounters a task that requires a capability that doesn't exist yet, it builds a new forge — because tools are output, not input.
+When Eidos encounters a task that requires browser automation, it plugs in Helios. When it encounters a task that requires deployment, it plugs in Railguey. When it encounters a task that requires session context, it plugs in resume-resume. When it encounters a task that requires a capability that doesn't exist yet, it builds a new forge — because tools are output, not input.
 
 This dynamic capability acquisition is what makes the forge architecture novel. Traditional AI systems have fixed capability sets. An agent is configured with a list of tools at startup, and that list doesn't change during execution. If the agent encounters a task that requires a tool it doesn't have, it fails.
 
@@ -418,7 +418,7 @@ The dynamic nature of the forges means Eidos adjusts to situations rather than b
 2. The loop DECOMPOSES this into subtasks: audit DNS, identify issues, fix configurations, deploy
 3. The loop SPECIALIZES: audit needs Clawdflare (DNS reading), fixing needs Clawdflare (DNS writing, with PIN approval), deploy needs Railguey
 4. During ACT, Clawdflare discovers a misconfigured SSL certificate on a subdomain that hosts a service
-5. The loop needs context: what service runs on that subdomain? It calls claude-resume's `search_sessions` to find sessions that discussed that service
+5. The loop needs context: what service runs on that subdomain? It calls resume-resume's `search_sessions` to find sessions that discussed that service
 6. It finds relevant context and calls `merge_context` to import the architectural decisions
 7. Now informed, it proposes a fix through the Pod (Dreamer suggests, Doubter challenges, Decider commits)
 8. The fix requires a redeployment — Railguey handles it
@@ -426,13 +426,13 @@ The dynamic nature of the forges means Eidos adjusts to situations rather than b
 10. LEARN: the episode is recorded — "subdomain X had misconfigured SSL because of decision Y, fixed by Z"
 11. Future tasks involving that subdomain benefit from this episode through PEFM retrieval
 
-No single forge handled this task. Five forges composed dynamically: Clawdflare, claude-resume, Railguey, Eidos MCP (for organizational context), and Vault (for API tokens). The loop decided which forges to plug in based on what the task needed at each step. The forges didn't know about each other. They just provided capabilities. The loop provided the composition.
+No single forge handled this task. Five forges composed dynamically: Clawdflare, resume-resume, Railguey, Eidos MCP (for organizational context), and Vault (for API tokens). The loop decided which forges to plug in based on what the task needed at each step. The forges didn't know about each other. They just provided capabilities. The loop provided the composition.
 
 This is what "USB for capabilities" means in practice. The robot doesn't have a fixed set of limbs. It has a bus that accepts any limb, and it plugs in the limbs it needs for the situation at hand.
 
 ### The Self-Improving Property
 
-The forges compound. Each new forge increases the value of every existing forge because the loop can compose them in combinations that weren't possible before. Helios + Railguey = automated deployment verification through the browser. claude-resume + KB = organizational knowledge enriched by session history. Clawdflare + Vault + SSO = end-to-end infrastructure security.
+The forges compound. Each new forge increases the value of every existing forge because the loop can compose them in combinations that weren't possible before. Helios + Railguey = automated deployment verification through the browser. resume-resume + KB = organizational knowledge enriched by session history. Clawdflare + Vault + SSO = end-to-end infrastructure security.
 
 And because tools are output, the loop can build new forges when it identifies gaps. "I need a capability that doesn't exist" triggers the bootstrap sequence: decompose the capability, build it, verify it works, learn from the process. The new forge joins the ecosystem. Future loops can use it.
 

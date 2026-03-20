@@ -3,8 +3,8 @@ requires = ["setuptools>=68.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "claude-resume"
-version = "0.1.0"
+name = "resume-resume"
+version = "0.1.7"
 description = "Post-crash Claude Code session recovery TUI"
 readme = "README.md"
 license = {text = "MIT"}
@@ -26,6 +26,9 @@ train = [
 ]
 
 [project.scripts]
-claude-resume = "claude_resume.cli:main"
-claude-resume-mcp = "claude_resume.mcp_server:main"
+resume-resume = "claude_resume.cli:main"
+resume-resume-mcp = "claude_resume.mcp_server:main"
 cr = "claude_resume.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["claude_resume*"]

@@ -1,4 +1,4 @@
-# claude-resume
+# resume-resume
 
 ## The Problem Nobody Talks About
 
@@ -8,11 +8,11 @@ This matters more than it sounds like it should. A developer running Claude Code
 
 The JSONL files are there. Thousands of them. But browsing them manually is like reading a database dump to remember what you had for lunch. The format is machine-readable, not human-readable. The files are huge — some sessions run to hundreds of megabytes. There's no index, no search, no way to ask "which of my 3,000 sessions was the one where I figured out the auth token refresh bug?"
 
-claude-resume exists because **session continuity is the bottleneck** in AI-assisted development, and nobody is solving it.
+resume-resume exists because **session continuity is the bottleneck** in AI-assisted development, and nobody is solving it.
 
 ## What It Actually Is
 
-claude-resume is two things in one package:
+resume-resume is two things in one package:
 
 1. **A terminal UI (TUI)** for humans — a full-screen session picker that shows your recent Claude Code sessions, tells you what each one was doing, and lets you jump back in with one keypress.
 
@@ -26,7 +26,7 @@ The TUI is what you use when you sit down at your machine after a crash. The MCP
 
 The original motivation was literal crash recovery. macOS kernel panics. Terminals get killed. Laptops go to sleep mid-session and never wake up properly. You reboot, and now you're staring at a blank terminal trying to remember what you were doing across three different projects.
 
-Before claude-resume, the recovery process was: open `~/.claude/projects/`, eyeball timestamps on hundreds of JSONL files, guess which ones were recent, `cat` one to see if it looks familiar, repeat until you find the right sessions, then manually construct `claude --resume <uuid>` commands.
+Before resume-resume, the recovery process was: open `~/.claude/projects/`, eyeball timestamps on hundreds of JSONL files, guess which ones were recent, `cat` one to see if it looks familiar, repeat until you find the right sessions, then manually construct `claude --resume <uuid>` commands.
 
 This took 5-15 minutes per crash. For someone running Claude Code heavily, that's multiple times a week. The friction compounds — you start avoiding complex multi-session workflows because the recovery cost is too high.
 
@@ -48,7 +48,7 @@ Your sessions are your work log, but they're invisible. You can't search them. Y
 
 ### The TUI: Session Discovery and Recovery
 
-When you run `claude-resume`, it scans `~/.claude/projects/` for JSONL session files modified within the time window (default: last 4 hours). For each session, it:
+When you run `resume-resume`, it scans `~/.claude/projects/` for JSONL session files modified within the time window (default: last 4 hours). For each session, it:
 
 1. **Parses the JSONL** to extract first messages (what the goal was), last messages (where you left off), recent tools used, and conversation statistics.
 
@@ -70,7 +70,7 @@ The keyboard shortcuts are designed for speed:
 
 ### Session Bookmarks: Ground Truth vs. Guessing
 
-By default, claude-resume infers session state from AI summaries — it's guessing whether you finished, crashed, or got stuck. Bookmarks replace guessing with ground truth.
+By default, resume-resume infers session state from AI summaries — it's guessing whether you finished, crashed, or got stuck. Bookmarks replace guessing with ground truth.
 
 The `/bookmark` skill runs inside any Claude Code session before you close it. In under 30 seconds, it captures:
 
@@ -88,7 +88,7 @@ Bookmarks are stored in `~/.claude/bookmarks/` as JSON files and are also writte
 
 ### The MCP Server: Sessions as an API
 
-The MCP server is where claude-resume becomes more than a recovery tool. It exposes session operations as tools that any Claude Code session can call:
+The MCP server is where resume-resume becomes more than a recovery tool. It exposes session operations as tools that any Claude Code session can call:
 
 **`search_sessions(query, limit)`** — Full-text search across all session JSONL files. Uses 16-thread parallel scanning with 1MB chunked streaming for large files (some sessions are 100MB+). Results are ranked by Reciprocal Rank Fusion (RRF) across five signals: term frequency, term density (matches per KB), recency (30-day half-life exponential decay), term balance across query words, and title match (3x boost if terms appear in the cached session title). AND logic across all query terms — every word must appear. Searches 5,000+ sessions in ~3 seconds.
 
@@ -117,13 +117,13 @@ The returned context includes bookmark data (lifecycle state, next actions, unco
 
 ## The Core Operations: Fork and Merge
 
-The conceptual heart of claude-resume is two operations borrowed from version control:
+The conceptual heart of resume-resume is two operations borrowed from version control:
 
 ### Fork: Branch a Session
 
 Fork creates a new independent session from an existing one. The original session stays untouched. The new session has the full conversation history but a fresh session ID — it's a branch point.
 
-This uses Claude Code's native `--fork-session` flag, which was built for exactly this purpose. claude-resume discovered and integrated it rather than building a custom implementation, because the native approach gives you the full conversation history (not just a summary) and is maintained by the Claude Code team.
+This uses Claude Code's native `--fork-session` flag, which was built for exactly this purpose. resume-resume discovered and integrated it rather than building a custom implementation, because the native approach gives you the full conversation history (not just a summary) and is maintained by the Claude Code team.
 
 Why fork matters: You're deep into a session investigating a bug. You think you've found the root cause, but you're not sure. You want to try a risky fix without polluting your investigation session. Fork it. If the fix works, great — you have a clean session with the solution. If it doesn't, the original session is untouched with all your investigation intact.
 
@@ -141,25 +141,25 @@ Why merge matters more than fork: Fork is a convenience — you can achieve the 
 
 ## Composability
 
-claude-resume is designed to compose with other tools rather than trying to do everything itself.
+resume-resume is designed to compose with other tools rather than trying to do everything itself.
 
 ### With Claude Code's Native Features
 
-claude-resume doesn't replicate Claude Code functionality — it extends it:
+resume-resume doesn't replicate Claude Code functionality — it extends it:
 
-- **`--resume`** is Claude Code's native session continuation. claude-resume wraps it with discovery (finding which session to resume) and presentation (showing you what each session was doing).
-- **`--fork-session`** is Claude Code's native session branching. claude-resume discovered this flag and exposes it through the MCP server, adding the ability to fork from any session in any project (not just the current directory).
-- **Session JSONL files** are Claude Code's native persistence format. claude-resume reads them but never writes to them — it's a read-only consumer that adds a search/summary/navigation layer on top.
+- **`--resume`** is Claude Code's native session continuation. resume-resume wraps it with discovery (finding which session to resume) and presentation (showing you what each session was doing).
+- **`--fork-session`** is Claude Code's native session branching. resume-resume discovered this flag and exposes it through the MCP server, adding the ability to fork from any session in any project (not just the current directory).
+- **Session JSONL files** are Claude Code's native persistence format. resume-resume reads them but never writes to them — it's a read-only consumer that adds a search/summary/navigation layer on top.
 
 ### With the Bookmark System
 
-The `/bookmark` skill and the auto-bookmark `Stop` hook are independent components that write JSON files to `~/.claude/bookmarks/`. claude-resume reads these files to enrich its session data, but the bookmark system works standalone — other tools can read the same bookmark files.
+The `/bookmark` skill and the auto-bookmark `Stop` hook are independent components that write JSON files to `~/.claude/bookmarks/`. resume-resume reads these files to enrich its session data, but the bookmark system works standalone — other tools can read the same bookmark files.
 
-The session resume protocol in `CLAUDE.md` reads bookmarks on startup to present a briefing. claude-resume's `boot_up` tool reads them to classify sessions. The bookmark data is a shared contract, not a private internal.
+The session resume protocol in `CLAUDE.md` reads bookmarks on startup to present a briefing. resume-resume's `boot_up` tool reads them to classify sessions. The bookmark data is a shared contract, not a private internal.
 
 ### With claude-session-commons
 
-The session parsing, caching, scoring, and classification logic lives in a separate `claude-session-commons` package. claude-resume's `sessions.py` is an 85-line wrapper that adds resume-specific defaults. This means other tools can build on the same session infrastructure:
+The session parsing, caching, scoring, and classification logic lives in a separate `claude-session-commons` package. resume-resume's `sessions.py` is an 85-line wrapper that adds resume-specific defaults. This means other tools can build on the same session infrastructure:
 
 - A different TUI could use the same session discovery and scoring
 - A CI tool could use the same classifier to identify automated sessions
@@ -169,9 +169,9 @@ The commons package provides: session discovery (`find_all_sessions`, `find_rece
 
 ### With the MCP Ecosystem
 
-As an MCP server, claude-resume composes with any Claude Code session automatically. You don't import a library or configure an integration — you add the server to `~/.claude/settings.json` and every Claude Code session on the machine gains the ability to search, read, fork, and merge sessions.
+As an MCP server, resume-resume composes with any Claude Code session automatically. You don't import a library or configure an integration — you add the server to `~/.claude/settings.json` and every Claude Code session on the machine gains the ability to search, read, fork, and merge sessions.
 
-This means higher-level workflows can build on claude-resume without knowing its internals:
+This means higher-level workflows can build on resume-resume without knowing its internals:
 
 - A `/takeoff` skill can call `boot_up()` to check for interrupted sessions before starting new work
 - A `/handoff` skill can call `merge_context()` to prepare a briefing for the next person
@@ -182,15 +182,15 @@ The MCP interface is the composability surface. Each tool does one thing, return
 
 ### With the Filesystem as Integration Layer
 
-claude-resume uses the filesystem as its integration layer, not a database or API:
+resume-resume uses the filesystem as its integration layer, not a database or API:
 
 - Session data: `~/.claude/projects/` (read-only, owned by Claude Code)
-- Summary cache: `~/.claude/resume-summaries/` (owned by claude-resume)
-- Bookmarks: `~/.claude/bookmarks/` (shared, written by bookmark skill, read by claude-resume)
+- Summary cache: `~/.claude/resume-summaries/` (owned by resume-resume)
+- Bookmarks: `~/.claude/bookmarks/` (shared, written by bookmark skill, read by resume-resume)
 - Daemon tasks: `~/.claude/daemon-tasks/` (shared queue between CLI and background daemon)
 - Heartbeats: `~/.claude/bookmarks/.heartbeat-*.json` (crash detection)
 
-Every piece of state is a JSON file in a predictable location. No database to manage, no service to keep running, no API keys to configure. Any tool that can read JSON files can integrate with claude-resume. Any tool that can write to the bookmarks directory can enrich claude-resume's data.
+Every piece of state is a JSON file in a predictable location. No database to manage, no service to keep running, no API keys to configure. Any tool that can read JSON files can integrate with resume-resume. Any tool that can write to the bookmarks directory can enrich resume-resume's data.
 
 This is intentional. The filesystem is the lowest-common-denominator integration layer. It works across languages, across processes, across machines (via synced home directories). It's inspectable — you can `cat` any file to see what's going on. It's debuggable — you can delete a cache file and it regenerates. It's composable — you can write a shell script that reads the same files.
 
@@ -207,7 +207,7 @@ The MCP server is designed around a specific constraint: MCP tool responses cons
 
 ### Read-Only on Session Data
 
-claude-resume never modifies Claude Code's JSONL files. It's a read-only layer that adds search, summaries, and navigation. This means it can never corrupt a session, never lose data, never conflict with Claude Code's own session management. The worst thing that can happen is a stale cache, which regenerates automatically.
+resume-resume never modifies Claude Code's JSONL files. It's a read-only layer that adds search, summaries, and navigation. This means it can never corrupt a session, never lose data, never conflict with Claude Code's own session management. The worst thing that can happen is a stale cache, which regenerates automatically.
 
 ### Inference Over Configuration
 
@@ -223,9 +223,9 @@ The MCP server follows the same pattern. `recent_sessions` returns minimal metad
 
 ## What Makes It Different
 
-Most session management tools treat sessions as a list to pick from. claude-resume treats sessions as a graph to navigate. The combination of search, summary, fork, and merge means sessions aren't isolated events — they're connected nodes in an ongoing body of work.
+Most session management tools treat sessions as a list to pick from. resume-resume treats sessions as a graph to navigate. The combination of search, summary, fork, and merge means sessions aren't isolated events — they're connected nodes in an ongoing body of work.
 
-The fork/merge model is borrowed from version control because the problem is structurally identical: you have a stream of changes (conversation turns instead of code commits), you need to branch (explore alternatives without losing the original), and you need to merge (bring discoveries from one branch into another). Claude Code sessions are branches of thought, and claude-resume gives you the operations to manage them as such.
+The fork/merge model is borrowed from version control because the problem is structurally identical: you have a stream of changes (conversation turns instead of code commits), you need to branch (explore alternatives without losing the original), and you need to merge (bring discoveries from one branch into another). Claude Code sessions are branches of thought, and resume-resume gives you the operations to manage them as such.
 
 The MCP server is what makes this more than a recovery tool. Recovery is the entry point — you start using it because your Mac crashed. But once it's installed, every Claude Code session on your machine can search, read, and merge other sessions. The capability is ambient. You don't have to think about it until you need it, and then it's already there.
 

@@ -1,6 +1,6 @@
 # The Re-Entry Tax Is Destroying Your AI Productivity
 
-![claude-resume — pick up where you left off](logo.png)
+![resume-resume — pick up where you left off](logo.png)
 
 Every time you start a new Claude Code session, you pay a tax.
 
@@ -33,7 +33,7 @@ That result didn't come from a better model. It came from structure. The framewo
 
 ---
 
-## The Problem That Made claude-resume Necessary
+## The Problem That Made resume-resume Necessary
 
 Those four studies weren't built in a single session. They were built across weeks of work, in dozens of sessions, picking up threads, referencing earlier decisions, building on what had already been established.
 
@@ -41,15 +41,15 @@ Every time we came back to the work, we paid the re-entry tax. Re-explaining the
 
 At some point we started asking: what if Claude could just *remember* the previous sessions? Not through a long context window — those fill up and confuse things. Through something structured. Compressed. Searchable.
 
-That's claude-resume.
+That's resume-resume.
 
 ---
 
 ## How It Works
 
-**claude-resume** is an MCP server. Install it once, and every Claude Code session on your machine gains the ability to search, read, and merge your full session history in plain English.
+**resume-resume** is an MCP server. Install it once, and every Claude Code session on your machine gains the ability to search, read, and merge your full session history in plain English.
 
-![The claude-resume TUI — real session data, real projects](tui.png)
+![The resume-resume TUI — real session data, real projects](tui.png)
 
 Two tools do the work:
 
@@ -61,7 +61,7 @@ Here's what that looks like in practice.
 
 When we went to document the Eidos benchmark result, we asked:
 
-> *"use claude-resume to find the eidos test where we beat claude"*
+> *"use resume-resume to find the eidos test where we beat claude"*
 
 ![Finding the benchmark session with plain English search](example-eidos-beat.png)
 
@@ -83,12 +83,12 @@ Both sessions — a strategic planning session and a philosophy documentation se
 
 We ran the numbers on our own usage. Here's what we found for a Claude Max user:
 
-**What claude-resume costs (ongoing, after initial indexing):**
+**What resume-resume costs (ongoing, after initial indexing):**
 - New session summaries: ~334/month × 1,550 Haiku tokens = ~0.33% of Max token budget
 - MCP call results added to context: ~1.10% of Max token budget
 - **Total monthly cost: ~1.10% of your Claude Max token budget**
 
-**What claude-resume saves:**
+**What resume-resume saves:**
 - Each `merge_context` replaces ~8,400 Sonnet tokens of manual re-establishment
 - Each `search_sessions` replaces ~2,000 Sonnet tokens of dead-end exploration
 - **Total monthly savings: ~1.22% of your Claude Max token budget**
@@ -103,15 +103,15 @@ Every merge_context call returns 5,400 Sonnet tokens that would have been spent 
 
 ## The Insight Behind the Insight
 
-Here's what building Eidos taught us, and what claude-resume embodies:
+Here's what building Eidos taught us, and what resume-resume embodies:
 
 **Structure multiplies intelligence.** Eidos beats Claude Opus 4.6 not by being smarter — Claude Opus 4.6 is a better model. It beats it by being *structured*. The framework routes tasks, constrains judgment, and builds on prior results. Each study built on the previous. The architecture compounded.
 
-claude-resume does the same thing for how you work. Your sessions don't have to be isolated events. They can compound. Each one builds on what came before — not because you remember it, but because the tool does.
+resume-resume does the same thing for how you work. Your sessions don't have to be isolated events. They can compound. Each one builds on what came before — not because you remember it, but because the tool does.
 
 THE-DISCIPLINE says the framework does not think. It routes and structures, so the models inside it can think better.
 
-claude-resume is that framework for your own session history.
+resume-resume is that framework for your own session history.
 
 ---
 
@@ -120,8 +120,8 @@ claude-resume is that framework for your own session history.
 Free. Open source. MIT.
 
 ```bash
-pip install claude-resume
-claude mcp add claude-resume -- claude-resume-mcp
+pip install resume-resume
+claude mcp add resume-resume -- resume-resume-mcp
 ```
 
 Your sessions stop being islands. They start being a graph.
@@ -129,5 +129,5 @@ Your sessions stop being islands. They start being a graph.
 ---
 
 *Daniel Shanklin — Director of AI, AIC Holdings*
-*[eidos-agi/claude-resume](https://github.com/eidos-agi/claude-resume) — part of the Eidos forge ecosystem*
+*[eidos-agi/resume-resume](https://github.com/eidos-agi/resume-resume) — part of the Eidos forge ecosystem*
 *Studies: [eidos-agi/eidos-studies](https://github.com/eidos-agi/eidos-studies)*
