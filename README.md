@@ -4,8 +4,6 @@
 
 # resume-resume
 
-*(formerly claude-resume)*
-
 **New free tool we're dropping.**
 
 | | |
