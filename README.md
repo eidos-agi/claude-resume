@@ -29,37 +29,6 @@ Two things, independently useful:
 1. **TUI** — A terminal interface for crash recovery. Launches instantly, shows recent sessions with AI summaries, lets you arrow to the one you want and hit `r` to resume.
 2. **MCP server** — Gives Claude (or any MCP client) tools to search, read, and reason over your full session history. "Find the session where we built the auth middleware." It searches 5,000+ sessions in ~3 seconds.
 
-```
-┌─ claude-resume ─────────────────────┬──────────────────────────────────────┐
-│ ── Today ──                         │ Fix auth token refresh bug           │
-│ ❱ Fix auth token refresh bug        │                                      │
-│   ~/repos/myapp  12 minutes ago     │ Directory:   ~/repos/myapp           │
-│                                     │ Last active: 12 minutes ago          │
-│   Add dark mode to settings page    │ Size:        4.2 MB                  │
-│   ~/repos/frontend  2 hours ago     │                                      │
-│                                     │ Session stats:                       │
-│ ── Yesterday ──                     │   Duration:     1h 23m               │
-│   Refactor database migrations      │   User msgs:    47                   │
-│   ~/repos/backend  18 hours ago     │   Tool uses:    312                  │
-│                                     │                                      │
-│                                     │ Goal:                                │
-│                                     │ Fix the auth token refresh that was  │
-│                                     │ silently failing after 401 responses │
-│                                     │ from the /api/user endpoint.         │
-│                                     │                                      │
-│                                     │ Where you left off:                  │
-│                                     │ Mid-edit in auth/refresh.ts. The     │
-│                                     │ retry logic was added but the test   │
-│                                     │ for expired tokens was still failing │
-│                                     │ with a race condition.               │
-│                                     │                                      │
-│                                     │ Key files:                           │
-│                                     │   • src/auth/refresh.ts              │
-│                                     │   • tests/auth.test.ts               │
-│                                     │   • src/api/client.ts                │
-└─────────────────────────────────────┴──────────────────────────────────────┘
-```
-
 ## Examples
 
 We built **Eidos**, a multi-agent AI system. In [our benchmark](https://github.com/eidos-agi/cockpit-eidos), Eidos outperformed **Claude Opus 4.6** by **3.6x** in both accuracy and speed on complex tasks with 15+ reasoning chains. Below, we use Claude Resume to pick up where we left off across multiple sessions.
