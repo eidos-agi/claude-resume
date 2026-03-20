@@ -120,9 +120,7 @@ claude-resume is that framework for your own session history.
 Free. Open source. MIT.
 
 ```bash
-git clone https://github.com/eidos-agi/claude-resume
-cd claude-resume
-pip install -e .
+pip install claude-resume
 claude mcp add claude-resume -- claude-resume-mcp
 ```
 

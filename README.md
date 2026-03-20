@@ -21,7 +21,7 @@
 Add it to Claude Code and every session on your machine can search, read, and merge your full session history — in plain English.
 
 ```bash
-pip install -e .
+pip install claude-resume
 claude mcp add claude-resume -- claude-resume-mcp
 ```
 
@@ -82,7 +82,7 @@ Two sessions — one about eidos-philosophy doc changes (Mar 14) and one with a 
 For when your machine died and you just need to get back to work.
 
 ```bash
-pip install -e .
+pip install claude-resume
 claude-resume        # last 4 hours
 cr 24                # last 24 hours
 cr --all             # everything
