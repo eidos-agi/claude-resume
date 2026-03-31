@@ -81,6 +81,28 @@ Two sessions — one about eidos-philosophy doc changes (Mar 14) and one with a 
 
 ---
 
+## Quick Resume — Paste & Go
+
+`claude --resume <id>` fails if you're in the wrong directory. `cr` fixes that — paste any claude command and it auto-discovers the correct project directory, ensures the right flags are on, and launches.
+
+```bash
+cr claude --resume ddf7fc98-6c93-40c8-9444-503d8a716dbf
+cr claude --resume ddf7fc98-6c93-40c8-9444-503d8a716dbf --model opus --chrome
+cr ddf7fc98-6c93-40c8-9444-503d8a716dbf
+```
+
+What it does:
+1. Parses the session ID out of whatever you pasted
+2. Searches `~/.claude/projects/*/` to find which project owns that session
+3. Resolves the encoded directory name back to a real filesystem path
+4. Adds `--dangerously-skip-permissions` and `--enable-auto-mode` if not already present
+5. Pops a macOS dialog showing the session, resolved cwd, and full command (proof it worked — visible outside the TUI)
+6. `cd`s to the correct directory and `exec`s into Claude
+
+No more "No conversation found" errors from being in the wrong folder.
+
+---
+
 ## TUI
 
 For when your machine died and you just need to get back to work.

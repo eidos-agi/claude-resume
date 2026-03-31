@@ -1,10 +1,12 @@
 """CLI entry point for claude-resume."""
 
 import os
+import re
 import subprocess
 import sys
 import termios
 import tty
+from pathlib import Path
 
 from .sessions import (
     SessionCache,
@@ -19,8 +21,12 @@ from .sessions import (
     shorten_path,
     MAX_SESSIONS_ALL,
 )
+from claude_session_commons import decode_project_path
 from claude_session_commons.summarize import analyze_patterns, summarize_deep, summarize_quick
 from .ui import SessionPickerApp
+
+UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I)
+PROJECTS_DIR = Path.home() / ".claude" / "projects"
 
 DEFAULT_HOURS = 4
 
@@ -464,7 +470,112 @@ def _cluster_sessions(hours: int = 48):
             # else: user pressed Esc, back to session list
 
 
+def _find_session_project(session_id: str) -> str | None:
+    """Find the project directory that owns a session ID."""
+    if not PROJECTS_DIR.is_dir():
+        return None
+    for project_dir in PROJECTS_DIR.iterdir():
+        if not project_dir.is_dir():
+            continue
+        if (project_dir / f"{session_id}.jsonl").exists():
+            return decode_project_path(project_dir.name)
+    return None
+
+
+def _parse_resume_args(argv: list[str]) -> tuple[str | None, list[str]]:
+    """Parse a pasted claude command into (session_id, extra_flags).
+
+    Handles:  cr claude --resume <id> --model opus --chrome
+              cr --resume <id>
+              cr <bare-uuid>
+    """
+    args = list(argv)
+    if args and args[0] == "claude":
+        args.pop(0)
+
+    session_id = None
+    extra = []
+    skip_next = False
+
+    for i, arg in enumerate(args):
+        if skip_next:
+            skip_next = False
+            continue
+        if arg == "--resume" and i + 1 < len(args):
+            session_id = args[i + 1]
+            skip_next = True
+        elif session_id is None and UUID_RE.match(arg):
+            session_id = arg
+        else:
+            extra.append(arg)
+
+    return session_id, extra
+
+
+def _resume_from_paste(argv: list[str]):
+    """cr claude --resume <id> [flags] — find cwd, add defaults, show proof, launch."""
+    session_id, extra_flags = _parse_resume_args(argv)
+
+    if session_id is None:
+        print(f"  \033[31m✗ No session ID found in: {' '.join(argv)}\033[0m")
+        sys.exit(1)
+
+    print()
+    print(f"  🔍 Searching for session {session_id}...")
+
+    project_path = _find_session_project(session_id)
+    if project_path is None:
+        print(f"  \033[31m✗ Session not found in any project directory\033[0m")
+        sys.exit(1)
+
+    if not os.path.isdir(project_path):
+        print(f"  \033[31m✗ Resolved path does not exist: {project_path}\033[0m")
+        sys.exit(1)
+
+    # Build command: always ensure defaults
+    cmd = ["claude", "--resume", session_id]
+    if "--dangerously-skip-permissions" not in extra_flags:
+        cmd.append("--dangerously-skip-permissions")
+    if "--enable-auto-mode" not in extra_flags:
+        cmd.append("--enable-auto-mode")
+    cmd.extend(extra_flags)
+
+    cmd_str = " ".join(cmd)
+    project_name = os.path.basename(project_path)
+
+    print(f"  \033[32m✓ Found!\033[0m")
+    print(f"  \033[90mResolved cwd: {project_path}\033[0m")
+    print()
+    print(f"  \033[36m→\033[0m Resuming in \033[1m{project_name}\033[0m")
+    print(f"  \033[90m{cmd_str}\033[0m")
+    print()
+
+    # macOS dialog — visible proof outside the TUI
+    dialog_msg = (
+        f"✓ Session: {session_id[:8]}…\\n"
+        f"📂 cwd: {project_path}\\n\\n"
+        f"{cmd_str}"
+    )
+    subprocess.Popen([
+        "osascript", "-e",
+        f'tell application "System Events" to display dialog "{dialog_msg}" '
+        f'with title "cr — Claude Resume" buttons {{"OK"}} default button "OK" giving up after 5'
+    ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    os.chdir(project_path)
+    os.execvp("claude", cmd)
+
+
 def main():
+    # cr claude --resume <id> ... — paste any claude command
+    if len(sys.argv) > 1 and (
+        "--resume" in sys.argv
+        or (len(sys.argv) == 2 and UUID_RE.match(sys.argv[1]))
+        or (sys.argv[1] == "claude")
+    ):
+        _resume_from_paste(sys.argv[1:])
+        sys.exit(0)
+
     # cr v2 — new TUI
     if len(sys.argv) > 1 and sys.argv[1] == "v2":
         from .ui_v2 import run_v2
