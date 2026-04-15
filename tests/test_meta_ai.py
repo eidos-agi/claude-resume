@@ -245,6 +245,38 @@ def test_decide_approve_prompt_edit_dict_form(isolated):
     assert meta_ai.A1_PROMPT_FILE.read_text() == new_text
 
 
+def test_decide_approve_prompt_edit_json_string_form(isolated):
+    """MCP transport can turn a dict diff into a JSON-encoded string;
+    _coerce_diff must decode it so apply doesn't fail."""
+    new_text = "---\nname: a1\n---\n# A1\nfrom json string\n"
+    p = meta_ai.file_a2_proposal(
+        target="a1_prompt", change_type="prompt_edit",
+        title="Rewrite via json string", evidence="transport artifact",
+        confidence=0.9,
+        diff=json.dumps({"full_new_text": new_text}),
+    )
+    out = meta_ai.decide_proposal(p["id"], "approved")
+    assert out["state"] == "approved"
+    assert out["apply_error"] is None
+    assert meta_ai.A1_PROMPT_FILE.read_text() == new_text
+
+
+def test_coerce_diff_passes_through_non_json_strings(isolated):
+    # A bare markdown string should stay a string (for the string branch)
+    raw = "---\nname: a1\n---\n# A1\nbare markdown\n"
+    assert meta_ai._coerce_diff(raw) == raw
+
+
+def test_coerce_diff_leaves_dict_alone(isolated):
+    d = {"full_new_text": "x"}
+    assert meta_ai._coerce_diff(d) is d
+
+
+def test_coerce_diff_decodes_json_dict(isolated):
+    result = meta_ai._coerce_diff('{"full_new_text": "abc"}')
+    assert result == {"full_new_text": "abc"}
+
+
 def test_decide_reject_does_not_apply(isolated):
     p = meta_ai.file_a2_proposal(
         target="thresholds.json", change_type="threshold_change",

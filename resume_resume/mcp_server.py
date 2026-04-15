@@ -548,20 +548,55 @@ def session_summary(session_id: str, force_regenerate: bool = False,
 
 
 def _scan_repo_git(repo_path: str) -> dict | None:
-    """Run git status --porcelain + git log on a repo. Returns None if not a git repo."""
+    """Run git status --porcelain -b (+ git log for dirty repos).
+
+    Combines status and branch into one subprocess call. Clean repos skip
+    the git log call and mtime scan entirely — 3 subprocess calls per repo
+    drops to 1 for clean repos and 2 for dirty repos.
+
+    Returns None if not a git repo.
+    """
     import subprocess
 
     repo = Path(repo_path)
     if not repo.exists() or not (repo / ".git").exists():
         return None
     try:
+        # Combined: status + branch in one call
         status = subprocess.run(
-            ["git", "status", "--porcelain"],
+            ["git", "status", "--porcelain", "-b"],
             capture_output=True, text=True, timeout=5, cwd=repo,
         )
-        dirty_files = [
-            line.strip() for line in status.stdout.splitlines() if line.strip()
-        ]
+        lines = status.stdout.splitlines()
+
+        # First line from -b is `## <branch>...<remote>` or `## HEAD (no branch)`
+        branch = ""
+        raw_dirty_lines: list[str] = []
+        if lines:
+            first = lines[0]
+            if first.startswith("## "):
+                rest = first[3:]
+                branch = rest.split("...", 1)[0].split(" ", 1)[0]
+                raw_dirty_lines = [ln for ln in lines[1:] if ln.strip()]
+            else:
+                # Older git or unexpected output — treat all non-empty lines as status
+                raw_dirty_lines = [ln for ln in lines if ln.strip()]
+
+        dirty_files = [ln.strip() for ln in raw_dirty_lines]
+
+        # Clean repo fast path — skip git log and mtime scan
+        if not dirty_files:
+            return {
+                "path": shorten_path(repo_path),
+                "branch": branch,
+                "dirty_files": [],
+                "dirty_file_count": 0,
+                "recent_commits": [],
+                "dirty": False,
+                "latest_dirty_mtime": 0.0,
+            }
+
+        # Dirty repo — fetch recent commits and mtimes
         log = subprocess.run(
             ["git", "log", "--oneline", "-3", "--format=%h %ar %s"],
             capture_output=True, text=True, timeout=5, cwd=repo,
@@ -569,18 +604,10 @@ def _scan_repo_git(repo_path: str) -> dict | None:
         recent_commits = [
             line.strip() for line in log.stdout.splitlines() if line.strip()
         ]
-        branch = subprocess.run(
-            ["git", "branch", "--show-current"],
-            capture_output=True, text=True, timeout=5, cwd=repo,
-        )
 
-        # Find the most recent mtime among dirty files for urgency scoring
         latest_mtime = 0.0
-        for line in status.stdout.splitlines():
-            if not line.strip():
-                continue
-            # porcelain format: XY filename (or XY "filename with spaces")
-            fname = line[3:].strip().strip('"')
+        for line in raw_dirty_lines:
+            fname = line[3:].strip().strip('"') if len(line) > 3 else line.strip()
             try:
                 fpath = repo / fname
                 if fpath.exists():
@@ -592,11 +619,11 @@ def _scan_repo_git(repo_path: str) -> dict | None:
 
         return {
             "path": shorten_path(repo_path),
-            "branch": branch.stdout.strip(),
+            "branch": branch,
             "dirty_files": dirty_files[:15],
             "dirty_file_count": len(dirty_files),
             "recent_commits": recent_commits,
-            "dirty": len(dirty_files) > 0,
+            "dirty": True,
             "latest_dirty_mtime": latest_mtime,
         }
     except (subprocess.TimeoutExpired, OSError):
@@ -886,14 +913,23 @@ def boot_up(hours: int = 24) -> dict:
     }
 
 
+_DIRTY_REPOS_CACHE: dict = {"data": None, "ts": 0.0}
+_DIRTY_REPOS_CACHE_TTL = 30.0  # seconds
+
+
 @mcp.tool()
 def dirty_repos() -> dict:
     """List all repos with uncommitted changes — your standing to-do list.
 
     Scans every project directory Claude Code has ever touched for dirty
-    git state. This list only shrinks by committing. Sorted by number
-    of dirty files descending.
+    git state. Result is cached for 30 seconds, so back-to-back calls
+    within the same session are nearly free.
     """
+    now = time.time()
+    cached = _DIRTY_REPOS_CACHE["data"]
+    if cached is not None and (now - _DIRTY_REPOS_CACHE["ts"]) < _DIRTY_REPOS_CACHE_TTL:
+        return {**cached, "cached": True, "cache_age_s": round(now - _DIRTY_REPOS_CACHE["ts"], 1)}
+
     all_sessions = find_all_sessions()
 
     # Collect all unique project directories (no time window — dirty doesn't age out)
@@ -931,12 +967,16 @@ def dirty_repos() -> dict:
 
     dirty.sort(key=lambda x: x["urgency"], reverse=True)
 
-    return {
+    result = {
         "dirty": dirty,
         "dirty_count": len(dirty),
         "clean_count": len(clean),
         "total_scanned": len(dirty) + len(clean),
+        "cached": False,
     }
+    _DIRTY_REPOS_CACHE["data"] = result
+    _DIRTY_REPOS_CACHE["ts"] = time.time()
+    return result
 
 
 def _launch_terminal(project_dir: str, command: str) -> dict | None:
@@ -1594,47 +1634,58 @@ def self_insights(days: int = 30) -> dict:
     return _tq.insights_report(days=days)
 
 
+def _wrap(items: list) -> dict:
+    """Wrap a list result in a dict so MCP tools return a uniform {items, count} shape.
+
+    fastmcp serializes bare list returns as {"result": [...]} which is
+    inconsistent with tools that return dicts directly. Using a named
+    wrapper here gives every list-returning tool the same response
+    surface.
+    """
+    return {"items": items, "count": len(items)}
+
+
 @mcp.tool()
-def self_recent_calls(limit: int = 50, tool: str = "") -> list[dict]:
+def self_recent_calls(limit: int = 50, tool: str = "") -> dict:
     """Tail of recent MCP tool calls. Most recent first."""
     events = _tq.load_events(days=7, tool=tool or None)
     events.sort(key=lambda e: e.get("ts") or "", reverse=True)
-    return events[:limit]
+    return _wrap(events[:limit])
 
 
 @mcp.tool()
-def self_slow_calls(threshold_ms: int = 1000, days: int = 7) -> list[dict]:
+def self_slow_calls(threshold_ms: int = 1000, days: int = 7) -> dict:
     """Calls that took longer than `threshold_ms`. Slowest first."""
     events = _tq.load_events(days=days)
     slow = [e for e in events if (e.get("duration_ms") or 0) >= threshold_ms]
     slow.sort(key=lambda e: e.get("duration_ms") or 0, reverse=True)
-    return slow
+    return _wrap(slow)
 
 
 @mcp.tool()
-def self_errors(days: int = 7) -> list[dict]:
+def self_errors(days: int = 7) -> dict:
     """Recent failing MCP calls with full context to debug."""
     events = _tq.load_events(days=days, status="error")
     events.sort(key=lambda e: e.get("ts") or "", reverse=True)
-    return events
+    return _wrap(events)
 
 
 @mcp.tool()
-def self_search(query: str, days: int = 30, limit: int = 20) -> list[dict]:
+def self_search(query: str, days: int = 30, limit: int = 20) -> dict:
     """BM25 search over past MCP calls (tool name + args + result + error)."""
     events = _tq.load_events(days=days)
-    return _tq.bm25_search(events, query, limit=limit)
+    return _wrap(_tq.bm25_search(events, query, limit=limit))
 
 
 @mcp.tool()
-def self_bundles(days: int = 7, gap_seconds: int = 30) -> list[dict]:
+def self_bundles(days: int = 7, gap_seconds: int = 30) -> dict:
     """Group contiguous same-session calls into work bundles.
 
     A bundle is a burst of calls within `gap_seconds` on the same session.
     Useful for finding slow workflows even when individual calls are fast.
     """
     events = _tq.load_events(days=days)
-    return _tq.session_bundles(events, gap_seconds=gap_seconds)
+    return _wrap(_tq.session_bundles(events, gap_seconds=gap_seconds))
 
 
 # ---------------------------------------------------------------------------
@@ -1723,9 +1774,9 @@ def self_a1_prompt() -> str:
 
 
 @mcp.tool()
-def self_process_proposals(state: str = "pending", limit: int = 50) -> list[dict]:
+def self_process_proposals(state: str = "pending", limit: int = 50) -> dict:
     """Human inbox. Returns A2 process-management proposals by state."""
-    return _meta.list_proposals(state=state, limit=limit)
+    return _wrap(_meta.list_proposals(state=state, limit=limit))
 
 
 @mcp.tool()
@@ -1740,21 +1791,21 @@ def self_process_decide(proposal_id: str, verdict: str, reason: str = "") -> dic
 
 
 @mcp.tool()
-def self_a1_output(limit: int = 20, action_class: str = "") -> list[dict]:
+def self_a1_output(limit: int = 20, action_class: str = "") -> dict:
     """Recent A1 recommendations. Optional filter by action_class: 'auto' or 'queued'."""
-    return _meta.a1_recent_recommendations(limit=limit, action_class=action_class or None)
+    return _wrap(_meta.a1_recent_recommendations(limit=limit, action_class=action_class or None))
 
 
 @mcp.tool()
-def self_a1_auto_applied(limit: int = 50) -> list[dict]:
+def self_a1_auto_applied(limit: int = 50) -> dict:
     """History of changes A1 has auto-applied to config/thresholds.json."""
-    return _meta.a1_auto_applied_history(limit=limit)
+    return _wrap(_meta.a1_auto_applied_history(limit=limit))
 
 
 @mcp.tool()
-def self_proposal_history(limit: int = 100) -> list[dict]:
+def self_proposal_history(limit: int = 100) -> dict:
     """Decided A2 proposals (approved/rejected/deferred) — your audit trail."""
-    return _meta.proposal_history(limit=limit)
+    return _wrap(_meta.proposal_history(limit=limit))
 
 
 def main():

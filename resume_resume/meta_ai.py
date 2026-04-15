@@ -347,10 +347,31 @@ def decide_proposal(proposal_id: str, verdict: str, reason: str = "") -> dict:
     return updated
 
 
+def _coerce_diff(diff):
+    """If diff arrived as a JSON-encoded string of a dict, decode it.
+
+    MCP transport / tool-call serialization can turn a dict parameter into a
+    JSON string. Apply logic wants the native dict shape. Best-effort decode;
+    leaves non-JSON strings unchanged so the string branch still catches them.
+    """
+    if not isinstance(diff, str):
+        return diff
+    stripped = diff.strip()
+    if not stripped or stripped[0] not in "{[":
+        return diff
+    try:
+        parsed = json.loads(stripped)
+        if isinstance(parsed, (dict, list)):
+            return parsed
+    except (json.JSONDecodeError, ValueError):
+        pass
+    return diff
+
+
 def _apply_proposal(proposal: dict) -> None:
     target = proposal.get("target")
     change_type = proposal.get("change_type")
-    diff = proposal.get("diff")
+    diff = _coerce_diff(proposal.get("diff"))
 
     if target == "thresholds.json" and change_type == "threshold_change":
         if not isinstance(diff, dict):
