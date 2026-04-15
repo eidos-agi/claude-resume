@@ -1637,6 +1637,72 @@ def self_bundles(days: int = 7, gap_seconds: int = 30) -> list[dict]:
     return _tq.session_bundles(events, gap_seconds=gap_seconds)
 
 
+# ---------------------------------------------------------------------------
+# Meta-AI: A1 (product-improvement) + A2 (process-management) + human inbox.
+# Human only sees A2's output. A1 auto-applies threshold tweaks. See ADR-002.
+# ---------------------------------------------------------------------------
+
+from . import meta_ai as _meta
+
+
+@mcp.tool()
+def self_run_a1(days: int = 30) -> dict:
+    """Invoke A1 — the product-improvement AI.
+
+    Reads telemetry insights, drafts recommendations, auto-applies the
+    'auto' class (threshold tweaks only). Queued-class recommendations are
+    filed for A2 to observe. Uses `claude -p` (fixed cost).
+    """
+    return _meta.run_a1(days=days)
+
+
+@mcp.tool()
+def self_run_a2(days: int = 30) -> dict:
+    """Invoke A2 — the process-management AI.
+
+    Reads A1's prompt, A1's recent output, A1's auto-applied actions, and
+    A2's own prior verdicts. Drafts process proposals (prompt edits,
+    threshold changes, criterion adds/removes) that land in the human
+    inbox. Uses `claude -p` (fixed cost).
+    """
+    return _meta.run_a2(days=days)
+
+
+@mcp.tool()
+def self_process_proposals(state: str = "pending", limit: int = 50) -> list[dict]:
+    """Human inbox. Returns A2 process-management proposals by state."""
+    return _meta.list_proposals(state=state, limit=limit)
+
+
+@mcp.tool()
+def self_process_decide(proposal_id: str, verdict: str, reason: str = "") -> dict:
+    """Approve, reject, or defer an A2 proposal.
+
+    verdict ∈ {approved, rejected, deferred}. On 'approved', the proposal's
+    change is applied to A1's config/prompt (leaves the working tree dirty;
+    commit manually).
+    """
+    return _meta.decide_proposal(proposal_id, verdict, reason=reason)
+
+
+@mcp.tool()
+def self_a1_output(limit: int = 20, action_class: str = "") -> list[dict]:
+    """Recent A1 recommendations. Optional filter by action_class: 'auto' or 'queued'."""
+    return _meta.a1_recent_recommendations(limit=limit, action_class=action_class or None)
+
+
+@mcp.tool()
+def self_a1_auto_applied(limit: int = 50) -> list[dict]:
+    """History of changes A1 has auto-applied to config/thresholds.json."""
+    return _meta.a1_auto_applied_history(limit=limit)
+
+
+@mcp.tool()
+def self_proposal_history(limit: int = 100) -> list[dict]:
+    """Decided A2 proposals (approved/rejected/deferred) — your audit trail."""
+    return _meta.proposal_history(limit=limit)
+
+
 def main():
     if "--install" in sys.argv:
         snippet = {

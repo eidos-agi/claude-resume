@@ -272,12 +272,37 @@ def bm25_search(events: list[dict], query: str, limit: int = 20) -> list[dict]:
     return [{"score": round(s, 3), **e} for s, e in scored[:limit]]
 
 
+def _load_thresholds_safe() -> dict:
+    """Import lazily to avoid circular import (meta_ai imports from here)."""
+    try:
+        from .meta_ai import load_thresholds
+        return load_thresholds()
+    except Exception:
+        return {
+            "slow_tool_p95_ms": 1000,
+            "error_prone_min_rate": 0.05,
+            "error_prone_min_calls": 3,
+            "dead_tool_divisor": 500,
+            "abandoned_queries_limit": 20,
+        }
+
+
 def insights_report(days: int = 30, root: Path | None = None) -> dict:
-    """Opinionated product-learning report."""
+    """Opinionated product-learning report.
+
+    Thresholds come from config/thresholds.json (A1 may have auto-tuned them).
+    """
     events = load_events(days=days, root=root)
     summary = usage_summary(events)
     total = len(events)
     errors = sum(1 for e in events if e.get("status") == "error")
+
+    t = _load_thresholds_safe()
+    dead_divisor = int(t.get("dead_tool_divisor", 500))
+    slow_p95 = float(t.get("slow_tool_p95_ms", 1000))
+    err_rate = float(t.get("error_prone_min_rate", 0.05))
+    err_min_calls = int(t.get("error_prone_min_calls", 3))
+    abandoned_limit = int(t.get("abandoned_queries_limit", 20))
 
     return {
         "days": days,
@@ -286,11 +311,12 @@ def insights_report(days: int = 30, root: Path | None = None) -> dict:
         "overall_error_rate": round(errors / total, 4) if total else 0.0,
         "distinct_tools": len(summary),
         "usage": summary,
-        "dead_tools": dead_tools(summary, threshold=max(1, total // 500)),
-        "slow_tools": slow_tools(summary, p95_threshold_ms=1000),
-        "error_prone_tools": error_prone_tools(summary, min_rate=0.05),
+        "dead_tools": dead_tools(summary, threshold=max(1, total // dead_divisor)),
+        "slow_tools": slow_tools(summary, p95_threshold_ms=slow_p95),
+        "error_prone_tools": error_prone_tools(summary, min_rate=err_rate, min_calls=err_min_calls),
         "abandoned_queries": [
             {"ts": e.get("ts"), "tool": e.get("tool"), "args": e.get("args")}
-            for e in abandoned_queries(events)[:20]
+            for e in abandoned_queries(events)[:abandoned_limit]
         ],
+        "thresholds": t,
     }
