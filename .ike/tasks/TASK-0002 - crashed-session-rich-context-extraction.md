@@ -1,14 +1,14 @@
 ---
 id: TASK-0002
 title: 'boot_up: extract richer context from crashed sessions'
-status: To Do
+status: In Progress
 created: '2026-03-25'
 priority: low
 tags:
   - boot_up
   - crash-recovery
   - ux
-updated: '2026-03-31'
+updated: '2026-04-16'
 ---
 Currently crashed sessions with no cached summary show "Last message: <last user msg>". This is better than blank but still weak.
 

@@ -648,8 +648,28 @@ def _scan_repo_git(repo_path: str) -> dict | None:
 
 def _extract_last_user_message(session_file: Path) -> str:
     """Read last user message from a JSONL session file for context when no summary exists."""
+    ctx = _extract_crash_context(session_file)
+    return ctx.get("last_user_msg") or ""
+
+
+def _extract_crash_context(session_file: Path) -> dict:
+    """Extract rich context from a session JSONL tail for crash recovery.
+
+    Returns:
+        last_user_msg: last human message (truncated to 120 chars)
+        last_assistant_msg: last AI response snippet (truncated to 120 chars)
+        last_tool: last tool_use name + brief input (e.g. "Edit file.py")
+        message_count: total entry count (approximate if file > 50KB)
+        duration_estimate: "Xh Ym" from first to last entry timestamp
+    """
+    result: dict = {
+        "last_user_msg": "",
+        "last_assistant_msg": "",
+        "last_tool": "",
+        "message_count": 0,
+        "duration_estimate": "",
+    }
     try:
-        # Read last 50KB — enough to find the last user message
         size = session_file.stat().st_size
         read_size = min(size, 50 * 1024)
         with open(session_file, "rb") as f:
@@ -657,7 +677,10 @@ def _extract_last_user_message(session_file: Path) -> str:
                 f.seek(size - read_size)
             tail = f.read().decode("utf-8", errors="replace")
 
-        last_msg = ""
+        first_ts = None
+        last_ts = None
+        count = 0
+
         for line in tail.splitlines():
             line = line.strip()
             if not line:
@@ -666,21 +689,87 @@ def _extract_last_user_message(session_file: Path) -> str:
                 entry = json.loads(line)
             except json.JSONDecodeError:
                 continue
-            if entry.get("type") == "human":
+            count += 1
+
+            # Track timestamps for duration estimate
+            ts = entry.get("timestamp")
+            if ts:
+                if first_ts is None:
+                    first_ts = ts
+                last_ts = ts
+
+            entry_type = entry.get("type")
+
+            if entry_type == "human":
                 msg = entry.get("message", {})
                 if isinstance(msg, dict):
                     content = msg.get("content", "")
                     if isinstance(content, str) and content.strip():
-                        last_msg = content.strip()
+                        result["last_user_msg"] = content.strip()[:120]
                     elif isinstance(content, list):
                         for part in content:
                             if isinstance(part, dict) and part.get("type") == "text":
                                 text = part.get("text", "").strip()
                                 if text:
-                                    last_msg = text
-        return last_msg[:120] if last_msg else ""
+                                    result["last_user_msg"] = text[:120]
+
+            elif entry_type == "assistant":
+                msg = entry.get("message", {})
+                if isinstance(msg, dict):
+                    content = msg.get("content", [])
+                    if isinstance(content, list):
+                        for block in content:
+                            if isinstance(block, dict):
+                                if block.get("type") == "text":
+                                    text = (block.get("text") or "").strip()
+                                    if text:
+                                        result["last_assistant_msg"] = text[:120]
+                                elif block.get("type") == "tool_use":
+                                    name = block.get("name", "")
+                                    inp = block.get("input", {})
+                                    # Brief summary of tool input
+                                    if isinstance(inp, dict):
+                                        # Try common keys for a meaningful label
+                                        label = (
+                                            inp.get("file_path")
+                                            or inp.get("path")
+                                            or inp.get("command", "")[:60]
+                                            or inp.get("query", "")[:60]
+                                            or inp.get("pattern", "")[:60]
+                                            or ""
+                                        )
+                                        if label:
+                                            result["last_tool"] = f"{name}: {label}"[:120]
+                                        else:
+                                            result["last_tool"] = name
+                                    else:
+                                        result["last_tool"] = name
+
+        # Estimate message count (if we only read tail, scale up)
+        if size > read_size:
+            scale = size / read_size
+            result["message_count"] = int(count * scale)
+        else:
+            result["message_count"] = count
+
+        # Duration estimate
+        if first_ts and last_ts and first_ts != last_ts:
+            try:
+                t0 = datetime.fromisoformat(str(first_ts).replace("Z", "+00:00"))
+                t1 = datetime.fromisoformat(str(last_ts).replace("Z", "+00:00"))
+                delta = t1 - t0
+                hours = int(delta.total_seconds() // 3600)
+                mins = int((delta.total_seconds() % 3600) // 60)
+                if hours > 0:
+                    result["duration_estimate"] = f"{hours}h {mins}m"
+                else:
+                    result["duration_estimate"] = f"{mins}m"
+            except (ValueError, TypeError):
+                pass
+
     except OSError:
-        return ""
+        pass
+    return result
 
 
 @mcp.tool()
@@ -828,11 +917,12 @@ def boot_up(hours: int = 24) -> dict:
         if not context_summary and bookmark:
             context_summary = bookmark.get("context", {}).get("summary", "")
 
-        # For sessions with no summary at all, extract last user message
+        # For sessions with no summary at all, extract rich crash context
+        crash_context = None
         if not context_summary:
-            last_msg = _extract_last_user_message(s["file"])
-            if last_msg:
-                context_summary = f"Last message: {last_msg}"
+            crash_context = _extract_crash_context(s["file"])
+            if crash_context.get("last_user_msg"):
+                context_summary = f"Last message: {crash_context['last_user_msg']}"
             else:
                 context_summary = "Session closed without explicit bookmark"
 
@@ -888,6 +978,17 @@ def boot_up(hours: int = 24) -> dict:
             row["branch"] = branch
         if last_commit:
             row["last_commit"] = last_commit
+
+        # Rich crash context — what was Claude doing when the session ended?
+        if crash_context:
+            if crash_context.get("last_assistant_msg"):
+                row["last_claude_said"] = crash_context["last_assistant_msg"]
+            if crash_context.get("last_tool"):
+                row["last_tool"] = crash_context["last_tool"]
+            if crash_context.get("message_count"):
+                row["message_count"] = crash_context["message_count"]
+            if crash_context.get("duration_estimate"):
+                row["duration"] = crash_context["duration_estimate"]
 
         sessions.append(row)
 
