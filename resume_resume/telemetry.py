@@ -185,6 +185,37 @@ def _request_id(context: MiddlewareContext) -> str | None:
     return None
 
 
+# Maximum bytes of serialized result to store in telemetry. Beyond this,
+# store a truncation marker + the true size. Prevents recursive bloat when
+# self_* tools return telemetry data that contains prior results which
+# contain prior results... (O(n^2) growth observed in production: self_recent_calls
+# hit 95s avg because each call's JSONL entry contained the full results of
+# all prior calls).
+_MAX_RESULT_BYTES = 10_000
+
+
+def _truncate_result(result: Any) -> Any:
+    """Return the result if it's under the size cap, else a truncation marker."""
+    serialized = _jsonable(result)
+    size = _safe_size(serialized)
+    if size <= _MAX_RESULT_BYTES:
+        return serialized
+    return {
+        "_truncated": True,
+        "_result_size": size,
+        "_preview": str(serialized)[:500],
+    }
+
+
+# Tools whose results are telemetry data — logging their full output
+# creates circular bloat. Log only size + preview for these.
+_SELF_TOOLS = frozenset({
+    "self_insights", "self_recent_calls", "self_slow_calls", "self_errors",
+    "self_search", "self_bundles", "self_a1_output", "self_a1_auto_applied",
+    "self_process_proposals", "self_proposal_history", "self_a2_scorecard",
+})
+
+
 class TelemetryMiddleware(Middleware):
     """Capture every MCP tool call to per-user JSONL."""
 
@@ -215,6 +246,23 @@ class TelemetryMiddleware(Middleware):
             raise
         finally:
             duration_ms = (time.perf_counter_ns() - started_ns) / 1_000_000
+
+            # For self_* tools, always truncate to prevent recursive bloat.
+            # For other tools, truncate only if result exceeds the cap.
+            if status == "ok":
+                result_size = _safe_size(result)
+                if tool_name in _SELF_TOOLS:
+                    logged_result = {
+                        "_truncated": True,
+                        "_result_size": result_size,
+                        "_tool_is_self": True,
+                    }
+                else:
+                    logged_result = _truncate_result(result)
+            else:
+                result_size = 0
+                logged_result = None
+
             event = {
                 "ts": started_iso,
                 "session_id": _session_id(context),
@@ -226,8 +274,8 @@ class TelemetryMiddleware(Middleware):
                 "error_type": error_type,
                 "error_msg": error_msg,
                 "error_tb": error_tb,
-                "result_size": _safe_size(result) if status == "ok" else 0,
-                "result": _jsonable(result) if status == "ok" else None,
+                "result_size": result_size,
+                "result": logged_result,
                 "pid": os.getpid(),
             }
             write_event(event)

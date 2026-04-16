@@ -117,25 +117,47 @@ truth instead of rediscovering the same problems every run.
 - **Test:** none yet — behavior is threshold-driven and would need a
   fixture with controlled telemetry to assert sensibly.
 
-### obs-002: Telemetry JSONL files grow unbounded
+### obs-002: Telemetry JSONL files grow unbounded (FIXED 6c37624)
 
-- **Severity:** ★
-- **Evidence:** `telemetry.py` appends one line per MCP call to
-  `~/.resume-resume/telemetry/<user>/YYYY-MM-DD.jsonl`. Daily rotation
-  exists (new file per day) but no retention cap, no gzip for old files.
-- **Why it sucks:** At heavy use (say 1000 calls/day × 365 days) that's
-  ~100MB raw. Gzipped, 1-5MB/year — fine. Raw is annoying over time.
-  Deferred in the original plan.
-- **Proposed fix:** rotate .jsonl files older than 7 days to .jsonl.gz;
-  env var `RESUME_RESUME_TELEMETRY_RETENTION_DAYS` to trim beyond N days.
-  See TASK-0017 / TASK-0018 in ike.
-- **Test:** none. Infrastructure concern, not behavior.
+- Fixed. Gzip rotation (7-day old files), retention via
+  `RESUME_RESUME_TELEMETRY_RETENTION_DAYS` env var, reader handles
+  `.jsonl.gz` transparently.
+- **Test:** `tests/test_telemetry.py::test_gzip_rotation_*` (3 tests)
+
+### obs-003: Recursive telemetry bloat on self_* tools (FIXED this session)
+
+- **Severity:** ★★★ (was blocking)
+- **Evidence:** `self_recent_calls` avg 95,369ms (95 seconds!) because
+  the middleware logged full results for self_* tools — which contain
+  prior telemetry entries, which contain prior results, creating O(n^2)
+  JSONL line growth. `self_slow_calls` 83s, `self_errors` 98s, same cause.
+- **Fix:** Two-layer defense: (1) self_* tools always log truncated
+  results (size + tool_is_self flag, no content), (2) all other tools
+  have a 10KB result cap with truncation marker if exceeded.
+- **Test:** existing middleware tests verify event structure; the fix
+  prevents future blowup by construction.
 
 ---
 
 ## Infrastructure / Dev ergonomics
 
-### dx-001: No integration tests for most `self_*` MCP tools
+### obs-004: Test calls pollute production telemetry
+
+- **Severity:** ★
+- **Evidence:** `self_process_decide` shows 83% error rate in telemetry —
+  but 5 of 6 "errors" are from `test_mcp_surface.py` intentionally calling
+  with bad IDs. Telemetry can't distinguish test from production.
+- **Why it sucks:** A1's insights could flag `self_process_decide` as
+  error-prone when it's actually fine. Test noise drowns signal.
+- **Proposed fix:** Set `RESUME_RESUME_TELEMETRY=0` in pytest conftest,
+  or add a `source` field to each event ("test" vs "production").
+- **Test:** none yet.
+
+---
+
+## Infrastructure / Dev ergonomics
+
+### dx-001: No integration tests for most `self_*` MCP tools (FIXED 4d940c7)
 
 - **Severity:** ★
 - **Evidence:** Existing tests hit the underlying Python functions in
