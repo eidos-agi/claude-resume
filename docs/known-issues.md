@@ -141,17 +141,13 @@ truth instead of rediscovering the same problems every run.
 
 ## Infrastructure / Dev ergonomics
 
-### obs-004: Test calls pollute production telemetry
+### obs-004: Test calls pollute production telemetry (FIXED this session)
 
-- **Severity:** ★
-- **Evidence:** `self_process_decide` shows 83% error rate in telemetry —
-  but 5 of 6 "errors" are from `test_mcp_surface.py` intentionally calling
-  with bad IDs. Telemetry can't distinguish test from production.
-- **Why it sucks:** A1's insights could flag `self_process_decide` as
-  error-prone when it's actually fine. Test noise drowns signal.
-- **Proposed fix:** Set `RESUME_RESUME_TELEMETRY=0` in pytest conftest,
-  or add a `source` field to each event ("test" vs "production").
-- **Test:** none yet.
+- Fixed. `tests/conftest.py` sets `RESUME_RESUME_TELEMETRY=0` at import
+  time. Individual tests that need telemetry ON (middleware capture tests,
+  gzip rotation tests) re-enable via `monkeypatch.setenv`.
+- Bonus: test suite runtime dropped from ~120s to ~67s because MCP
+  integration tests no longer write bloated JSONL on every tool call.
 
 ---
 

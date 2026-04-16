@@ -110,6 +110,7 @@ def test_today_path_uses_date(tmp_path: Path):
 
 @pytest.mark.asyncio
 async def test_middleware_captures_successful_call(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("RESUME_RESUME_TELEMETRY", "1")
     monkeypatch.setattr(telemetry, "_today_path", lambda: tmp_path / "today.jsonl")
 
     class FakeMsg:
@@ -141,6 +142,7 @@ async def test_middleware_captures_successful_call(tmp_path: Path, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_middleware_captures_error(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("RESUME_RESUME_TELEMETRY", "1")
     monkeypatch.setattr(telemetry, "_today_path", lambda: tmp_path / "today.jsonl")
 
     class FakeMsg:
@@ -176,7 +178,7 @@ def test_gzip_rotation_compresses_old_files(tmp_path: Path, monkeypatch):
     """obs-002: files older than 7 days get gzipped on next write."""
     import gzip as _gzip
 
-    # Clear the rotation sentinel so _maybe_rotate runs
+    monkeypatch.setenv("RESUME_RESUME_TELEMETRY", "1")
     telemetry._ROTATE_SENTINEL.clear()
     monkeypatch.setattr(telemetry, "_today_path", lambda: tmp_path / "today.jsonl")
 
@@ -212,6 +214,7 @@ def test_gzip_retention_deletes_beyond_limit(tmp_path: Path, monkeypatch):
     """obs-002: RESUME_RESUME_TELEMETRY_RETENTION_DAYS deletes old gz files."""
     import gzip as _gzip
 
+    monkeypatch.setenv("RESUME_RESUME_TELEMETRY", "1")
     telemetry._ROTATE_SENTINEL.clear()
     monkeypatch.setattr(telemetry, "_today_path", lambda: tmp_path / "today.jsonl")
     monkeypatch.setenv("RESUME_RESUME_TELEMETRY_RETENTION_DAYS", "30")
@@ -237,6 +240,7 @@ def test_gzip_retention_deletes_beyond_limit(tmp_path: Path, monkeypatch):
 
 def test_gzip_rotation_runs_only_once_per_process(tmp_path: Path, monkeypatch):
     """Sentinel prevents re-scanning on every write."""
+    monkeypatch.setenv("RESUME_RESUME_TELEMETRY", "1")
     telemetry._ROTATE_SENTINEL.clear()
     monkeypatch.setattr(telemetry, "_today_path", lambda: tmp_path / "today.jsonl")
 
