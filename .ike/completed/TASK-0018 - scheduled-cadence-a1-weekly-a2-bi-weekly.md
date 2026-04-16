@@ -1,7 +1,7 @@
 ---
 id: TASK-0018
 title: 'Scheduled cadence: A1 weekly, A2 bi-weekly'
-status: In Progress
+status: Done
 created: '2026-04-15'
 priority: low
 tags:

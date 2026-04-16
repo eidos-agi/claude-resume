@@ -1,7 +1,7 @@
 ---
 id: TASK-0017
 title: 'Outcome tracking: did A2''s approved changes improve A1?'
-status: In Progress
+status: Done
 created: '2026-04-15'
 priority: medium
 tags:
@@ -16,3 +16,5 @@ acceptance-criteria:
 updated: '2026-04-16'
 ---
 For every approved A2 proposal, start tracking: what did A1 output before vs after the change? Quality metric TBD (user approval rate of A1's auto-class recommendations, or telemetry error rate improvement). Surface via self_a2_scorecard showing: for last N approved A2 proposals, estimated effect on A1's output quality.
+
+**Completion notes:** Shipped in 6c37624. self_a2_scorecard shows before/after A1 stats per approved proposal.
