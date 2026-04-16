@@ -3,12 +3,13 @@
   "error_prone_min_rate": 0.05,
   "error_prone_min_calls": 3,
   "dead_tool_divisor": 500,
+  "dead_tool_min_volume": 100,
   "a1_min_confidence": 0.6,
   "a2_min_confidence": 0.7,
   "abandoned_queries_limit": 20,
   "_meta": {
-    "version": 1,
+    "version": 2,
     "managed_by": "A1 auto-apply + A2 proposals + human approval",
-    "notes": "A1 may edit numeric values in its auto-class. A2 proposes changes here. Human approves via self_process_decide."
+    "notes": "A1 may edit numeric values in its auto-class. A2 proposes changes here. Human approves via self_process_decide. dead_tool_min_volume suppresses the dead_tools list until total_calls reaches that many — obs-001 fix."
   }
 }

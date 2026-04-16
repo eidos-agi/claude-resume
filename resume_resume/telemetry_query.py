@@ -303,6 +303,15 @@ def insights_report(days: int = 30, root: Path | None = None) -> dict:
     err_rate = float(t.get("error_prone_min_rate", 0.05))
     err_min_calls = int(t.get("error_prone_min_calls", 3))
     abandoned_limit = int(t.get("abandoned_queries_limit", 20))
+    min_volume = int(t.get("dead_tool_min_volume", 100))
+
+    # obs-001 fix: at low total volume, the dead_tools signal is noise.
+    # Return an empty list until we have enough calls to be meaningful.
+    # At and above min_volume, use the divisor-based threshold.
+    if total < min_volume:
+        dead = []
+    else:
+        dead = dead_tools(summary, threshold=max(1, total // dead_divisor))
 
     return {
         "days": days,
@@ -311,7 +320,8 @@ def insights_report(days: int = 30, root: Path | None = None) -> dict:
         "overall_error_rate": round(errors / total, 4) if total else 0.0,
         "distinct_tools": len(summary),
         "usage": summary,
-        "dead_tools": dead_tools(summary, threshold=max(1, total // dead_divisor)),
+        "dead_tools": dead,
+        "dead_tools_suppressed_below_volume": total < min_volume,
         "slow_tools": slow_tools(summary, p95_threshold_ms=slow_p95),
         "error_prone_tools": error_prone_tools(summary, min_rate=err_rate, min_calls=err_min_calls),
         "abandoned_queries": [

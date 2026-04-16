@@ -441,15 +441,31 @@ def _read_messages(session_file: Path, keyword: str, limit: int) -> dict:
     return result
 
 
+_RECENT_SESSIONS_CACHE: dict = {}
+_RECENT_SESSIONS_CACHE_TTL = 10.0  # seconds — short because sessions change fast
+
+
 @mcp.tool()
-def recent_sessions(hours: int = 24, limit: int = 10) -> list[dict]:
+def recent_sessions(hours: int = 24, limit: int = 10) -> dict:
     """List recently active Claude Code sessions.
 
     Resume any session with: claude --resume <id>
+
+    Result is cached for 10 seconds per (hours, limit) key so rapid
+    back-to-back calls are free. Short TTL because sessions churn.
     """
     limit = max(1, min(limit, 25))
+    cache_key = (hours, limit)
+    now = time.time()
+    cached = _RECENT_SESSIONS_CACHE.get(cache_key)
+    if cached and (now - cached["ts"]) < _RECENT_SESSIONS_CACHE_TTL:
+        return {**cached["data"], "cached": True, "cache_age_s": round(now - cached["ts"], 1)}
+
     sessions = find_recent_sessions(hours, max_sessions=limit)
-    return [_session_row(s) for s in sessions]
+    items = [_session_row(s) for s in sessions]
+    data = {"items": items, "count": len(items), "cached": False}
+    _RECENT_SESSIONS_CACHE[cache_key] = {"data": data, "ts": now}
+    return data
 
 
 @mcp.tool()
@@ -1623,6 +1639,10 @@ except ImportError:
 from . import telemetry_query as _tq
 
 
+_SELF_INSIGHTS_CACHE: dict = {}
+_SELF_INSIGHTS_CACHE_TTL = 15.0  # seconds — long enough for a skill loop, short enough for fresh data
+
+
 @mcp.tool()
 def self_insights(days: int = 30) -> dict:
     """Opinionated report on resume-resume's own MCP usage.
@@ -1630,8 +1650,19 @@ def self_insights(days: int = 30) -> dict:
     Returns total calls, per-tool summary (counts, error rate, p50/p95
     latency), plus callouts for dead tools, slow tools, error-prone tools,
     and abandoned queries. This is the weekly roadmap-steering tool.
+
+    Cached for 15 seconds per `days` key so A1/A2 skill loops that re-hit
+    insights multiple times per turn don't re-scan the JSONL corpus.
     """
-    return _tq.insights_report(days=days)
+    now = time.time()
+    cached = _SELF_INSIGHTS_CACHE.get(days)
+    if cached and (now - cached["ts"]) < _SELF_INSIGHTS_CACHE_TTL:
+        return {**cached["data"], "cached": True, "cache_age_s": round(now - cached["ts"], 1)}
+
+    data = _tq.insights_report(days=days)
+    data["cached"] = False
+    _SELF_INSIGHTS_CACHE[days] = {"data": data, "ts": now}
+    return data
 
 
 def _wrap(items: list) -> dict:

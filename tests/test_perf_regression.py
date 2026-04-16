@@ -27,6 +27,14 @@ def _bust_dirty_repos_cache() -> None:
     ms._DIRTY_REPOS_CACHE["ts"] = 0.0
 
 
+def _bust_self_insights_cache() -> None:
+    ms._SELF_INSIGHTS_CACHE.clear()
+
+
+def _bust_recent_sessions_cache() -> None:
+    ms._RECENT_SESSIONS_CACHE.clear()
+
+
 async def _time_call(client: Client, tool: str, args: dict) -> float:
     """Return duration in ms for one MCP tool call."""
     t0 = time.perf_counter()
@@ -125,11 +133,12 @@ async def test_self_list_tools_return_wrapped_dict(client):
 
 @pytest.mark.asyncio
 async def test_self_insights_fast(client):
-    """perf-003: self_insights is hit repeatedly by A1/A2/human. Must stay
-    fast even as telemetry grows.
+    """perf-003: self_insights is hit repeatedly by A1/A2/human. Cold path
+    must stay fast even as telemetry grows.
 
     Generous 500ms ceiling; current is ~5ms. If this starts failing, JSONL
     scanning has become a bottleneck and we need a daily index."""
+    _bust_self_insights_cache()
     dur_ms = await _time_call(client, "self_insights", {"days": 30})
     assert dur_ms < 500, (
         f"self_insights took {dur_ms:.0f}ms — suggests telemetry scan has "
@@ -142,13 +151,99 @@ async def test_self_insights_fast(client):
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_recent_sessions_under_generous_ceiling(client):
-    """perf-004: recent_sessions was observed at 1132ms in telemetry and
-    ~1200ms when remeasured. No optimization shipped yet — this test
-    documents the current state with a generous ceiling. Tighten when a
-    fix lands."""
-    dur_ms = await _time_call(client, "recent_sessions", {"hours": 24, "limit": 5})
-    assert dur_ms < 3000, (
-        f"recent_sessions took {dur_ms:.0f}ms — regression beyond the "
-        "known-slow baseline (~1200ms)."
+async def test_recent_sessions_cached_is_fast(client):
+    """perf-002: recent_sessions now has a 10s TTL cache. Cold path is
+    still upstream-limited (find_all_sessions in claude-session-commons),
+    but the cached path must be near-instant."""
+    _bust_recent_sessions_cache()
+    first = await _time_call(client, "recent_sessions", {"hours": 24, "limit": 5})
+    cached_ms = await _time_call(client, "recent_sessions", {"hours": 24, "limit": 5})
+    assert cached_ms < 50, (
+        f"recent_sessions cached path too slow ({cached_ms:.0f}ms) — "
+        "is _RECENT_SESSIONS_CACHE working?"
     )
+    # First call ceiling — generous because upstream is uncached
+    assert first < 5000, (
+        f"recent_sessions cold path {first:.0f}ms exceeds 5000ms ceiling."
+    )
+
+
+@pytest.mark.asyncio
+async def test_recent_sessions_returns_wrapped_shape(client):
+    """perf-002b: response shape normalization — recent_sessions joins the
+    self_* tools in returning {items, count, cached}."""
+    result = await client.call_tool("recent_sessions", {"hours": 24, "limit": 3})
+    data = result.data
+    assert "items" in data and "count" in data
+    assert data["count"] == len(data["items"])
+    assert "cached" in data
+
+
+@pytest.mark.asyncio
+async def test_self_insights_cached_is_flagged(client):
+    """perf-003: self_insights now has a 15s TTL cache. Second call within
+    the window must be marked cached=True."""
+    _bust_self_insights_cache()
+    r1 = await client.call_tool("self_insights", {"days": 30})
+    assert r1.data.get("cached") is False
+    r2 = await client.call_tool("self_insights", {"days": 30})
+    assert r2.data.get("cached") is True
+    assert "cache_age_s" in r2.data
+
+
+def test_obs001_dead_tools_suppressed_below_min_volume(tmp_path, monkeypatch):
+    """obs-001: insights_report must suppress the dead_tools list when
+    total_calls < dead_tool_min_volume. Tested directly against the
+    function with an isolated telemetry root — volume-independent."""
+    from datetime import datetime, timezone
+    import json as _json
+    from resume_resume import telemetry_query as tq
+
+    # Build a tiny synthetic telemetry file (50 calls, under the 100 threshold)
+    day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    (tmp_path / f"{day}.jsonl").write_text(
+        "\n".join(
+            _json.dumps({
+                "ts": datetime.now(timezone.utc).isoformat(),
+                "tool": f"tool_{i % 5}",
+                "duration_ms": 10.0,
+                "status": "ok",
+                "result": None,
+            })
+            for i in range(50)
+        )
+    )
+
+    r = tq.insights_report(days=1, root=tmp_path)
+    assert r["total_calls"] == 50
+    assert r["dead_tools"] == []
+    assert r.get("dead_tools_suppressed_below_volume") is True
+
+
+def test_obs001_dead_tools_shown_above_min_volume(tmp_path, monkeypatch):
+    """obs-001: above the min_volume threshold, dead_tools list is populated
+    normally. Synthetic 200-call corpus with one hog and one dead tool."""
+    from datetime import datetime, timezone
+    import json as _json
+    from resume_resume import telemetry_query as tq
+
+    day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    lines = []
+    # 199 calls to "hog", 1 call to "rare" — rare should be flagged dead
+    for _ in range(199):
+        lines.append(_json.dumps({
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "tool": "hog", "duration_ms": 5.0, "status": "ok", "result": None,
+        }))
+    lines.append(_json.dumps({
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "tool": "rare", "duration_ms": 5.0, "status": "ok", "result": None,
+    }))
+    (tmp_path / f"{day}.jsonl").write_text("\n".join(lines))
+
+    r = tq.insights_report(days=1, root=tmp_path)
+    assert r["total_calls"] == 200
+    assert r.get("dead_tools_suppressed_below_volume") is False
+    dead_names = [t["tool"] for t in r["dead_tools"]]
+    assert "rare" in dead_names
+    assert "hog" not in dead_names
