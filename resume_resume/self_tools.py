@@ -384,20 +384,34 @@ def register_self_tools(mcp_instance):
                 except (subprocess.TimeoutExpired, OSError):
                     pass
 
+            # Estimate hours from session file timestamps
+            est_hours = 0.0
+            for s in sessions:
+                try:
+                    birth = s["file"].stat().st_birthtime
+                    dur = s["mtime"] - birth
+                    if 60 < dur < 86400:  # between 1 min and 24 hours
+                        est_hours += dur / 3600
+                except (OSError, AttributeError):
+                    pass
+
             latest = max(s["mtime"] for s in sessions)
             projects.append({
                 "project": shorten_path(pd),
                 "sessions": len(sessions),
                 "commits": commit_count,
+                "est_hours": round(est_hours, 1),
                 "last_active": datetime.fromtimestamp(latest).strftime("%Y-%m-%d %H:%M"),
             })
             total_sessions += len(sessions)
             total_commits += commit_count
 
+        total_hours = round(sum(p["est_hours"] for p in projects), 1)
         return {
             "hours": hours,
             "active_projects": len(projects),
             "total_sessions": total_sessions,
             "total_commits": total_commits,
+            "total_est_hours": total_hours,
             "projects": projects,
         }
