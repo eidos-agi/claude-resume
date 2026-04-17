@@ -571,7 +571,7 @@ def _read_messages(session_file: Path, keyword: str, limit: int) -> dict:
 
 
 _RECENT_SESSIONS_CACHE: dict = {}
-_RECENT_SESSIONS_CACHE_TTL = 10.0  # seconds — short because sessions change fast
+_RECENT_SESSIONS_CACHE_TTL = 30.0  # seconds — long enough to survive slow first calls under load
 
 
 @mcp.tool()
@@ -600,9 +600,11 @@ def recent_sessions(hours: int = 24, limit: int = 10, project: str = "",
     if cached and (now - cached["ts"]) < _RECENT_SESSIONS_CACHE_TTL:
         return {**cached["data"], "cached": True, "cache_age_s": round(now - cached["ts"], 1)}
 
-    sessions = find_recent_sessions(hours, max_sessions=0 if (project or not include_automated) else limit)
+    # Fetch enough sessions to have headroom after filtering.
+    # Fetching ALL sessions (max_sessions=0) is too expensive under load.
+    fetch_limit = limit * 5 if (project or not include_automated) else limit
+    sessions = find_recent_sessions(hours, max_sessions=fetch_limit)
 
-    # Filter automated sessions using the ML classifier cache
     if not include_automated:
         cache_index = _get_cache_index()
         sessions = [
