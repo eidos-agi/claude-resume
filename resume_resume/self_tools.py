@@ -597,11 +597,24 @@ def register_self_tools(mcp_instance):
             total_commits += commit_count
 
         total_hours = round(sum(p["est_hours"] for p in projects), 1)
+
+        # Focus score: how concentrated is your attention?
+        # 100 = all sessions on one project. 0 = evenly spread across many.
+        # Uses normalized entropy: 1 - H(distribution) / log(N).
+        import math as _math
+        focus_score = 100
+        if len(projects) > 1 and total_sessions > 0:
+            probs = [p["sessions"] / total_sessions for p in projects]
+            entropy = -sum(p * _math.log2(p) for p in probs if p > 0)
+            max_entropy = _math.log2(len(projects))
+            focus_score = round((1 - entropy / max_entropy) * 100) if max_entropy > 0 else 100
+
         return {
             "hours": hours,
             "active_projects": len(projects),
             "total_sessions": total_sessions,
             "total_commits": total_commits,
             "total_est_hours": total_hours,
+            "focus_score": focus_score,
             "projects": projects,
         }
