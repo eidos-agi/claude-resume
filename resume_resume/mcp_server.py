@@ -626,7 +626,12 @@ _RECENT_SESSIONS_CACHE_TTL = 30.0  # seconds — long enough to survive slow fir
 @mcp.tool()
 def recent_sessions(hours: int = 24, limit: int = 10, project: str = "",
                     include_automated: bool = False) -> dict:
-    """List recently active Claude Code sessions.
+    """List recently active Claude Code sessions, newest first.
+
+    Use this for: "show me recent sessions", "what sessions ran today".
+    Use my_week instead for: "what did I work on this week" (cross-project summary).
+    Use healthy_sessions instead for: "which sessions are worth resuming" (value-ranked).
+    Use search_sessions instead for: keyword-based search across all sessions.
 
     Resume any session with: claude --resume <id>
 
@@ -973,17 +978,15 @@ def _extract_crash_context(session_file: Path) -> dict:
 
 @mcp.tool()
 def boot_up(hours: int = 24) -> dict:
-    """Crash recovery: find interrupted Claude Code sessions that need attention.
+    """Crash recovery: find interrupted sessions + dirty repos needing attention.
 
-    Detects sessions that were recently active but didn't exit cleanly —
-    crashed terminals, killed processes, laptop sleep/restart, etc.
-    Returns a prioritized list scored by urgency (recency + dirty files).
+    Use this for: /takeoff, session start, "what needs attention right now?"
+    Use suggest_next instead for: prioritized next-action across all projects.
+    Use my_week instead for: weekly activity summary across projects.
 
-    Also scans project directories for dirty git state — repos with
-    uncommitted changes that may not have a matching session.
-
-    Use after a reboot, crash, or "what was I working on?" moment.
-    Resume any session with the resume_cmd provided in each result.
+    Detects sessions that didn't exit cleanly (crashed, killed, slept) and
+    repos with uncommitted changes. Scored by urgency (recency + dirty files).
+    Each result includes crash context (what Claude was doing when it died).
     """
     import subprocess
 
