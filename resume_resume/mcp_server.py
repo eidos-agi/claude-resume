@@ -57,6 +57,31 @@ def _find_all_sessions_cached() -> list[dict]:
     return result
 
 
+# Cache for the BM25 cache_index (bulk-loaded session cache files).
+# Reading ~5000 × 1KB JSON files takes ~500ms. Caching this with a
+# 30s TTL means back-to-back searches skip the I/O entirely.
+_CACHE_INDEX: dict = {"data": None, "ts": 0.0}
+_CACHE_INDEX_TTL = 30.0
+
+
+def _get_cache_index() -> dict[str, dict]:
+    now = time.time()
+    if _CACHE_INDEX["data"] is not None and (now - _CACHE_INDEX["ts"]) < _CACHE_INDEX_TTL:
+        return _CACHE_INDEX["data"]
+    cache_index: dict[str, dict] = {}
+    if _cache._dir.exists():
+        for cache_file in _cache._dir.glob("*.json"):
+            sid = cache_file.stem
+            try:
+                data = json.loads(cache_file.read_bytes())
+                cache_index[sid] = data
+            except Exception:
+                pass
+    _CACHE_INDEX["data"] = cache_index
+    _CACHE_INDEX["ts"] = time.time()
+    return cache_index
+
+
 def _summary_valid(summary: dict) -> bool:
     """Reject cached summaries that are garbage (XML blobs, fragments, etc.)."""
     if not isinstance(summary, dict):
@@ -333,16 +358,10 @@ def search_sessions(query: str, limit: int = 10, include_automated: bool = False
     p = p_ctx.__enter__()
     p.update(f"Searching {len(all_sessions)} sessions...", icon="search")
 
-    # Bulk-load all cache files ONCE before the thread pool (~1KB each vs 1-5MB JSONL).
-    cache_index: dict[str, dict] = {}
-    if _cache._dir.exists():
-        for cache_file in _cache._dir.glob("*.json"):
-            sid = cache_file.stem
-            try:
-                data = json.loads(cache_file.read_bytes())
-                cache_index[sid] = data
-            except Exception:
-                pass
+    # Bulk-load all cache files — cached across calls (30s TTL).
+    # Reading ~5000 × 1KB JSON files is ~500ms. Caching avoids this on
+    # back-to-back searches within a session.
+    cache_index = _get_cache_index()
 
     # Build corpus-level BM25 statistics (IDF, avg doc lengths)
     corpus = build_corpus_stats(cache_index)
