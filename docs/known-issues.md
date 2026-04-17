@@ -129,16 +129,11 @@ truth instead of rediscovering the same problems every run.
   list-returning tools ({items, count} shape), validation rejections,
   core tool smoke, and A2 scorecard.
 
-### dx-002: `pyright` can't resolve some internal imports
+### dx-002: `pyright` can't resolve some internal imports (FIXED this session)
 
-- **Severity:** ★
-- **Evidence:** Diagnostics on `claude_session_commons` and various
-  `mcp_server.py` internal imports show as unresolved. The tests pass, the
-  MCP server loads, but the IDE complains.
-- **Why it sucks:** Noise in the IDE. Makes real diagnostics harder to
-  spot. Masks real issues.
-- **Proposed fix:** add a `pyrightconfig.json` with correct `venvPath` /
-  `venv` / `extraPaths` so the dev env is recognized. Not a product bug.
+- Fixed. Added `pyrightconfig.json` with pyenv venv path, python 3.12,
+  extraPaths for claude-session-commons, and basic type checking mode.
+  Remaining Pyright warnings are demoted to warnings (not errors).
 
 ---
 

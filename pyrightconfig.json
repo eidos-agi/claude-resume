@@ -1,0 +1,11 @@
+{
+  "venvPath": "/Users/dshanklinbv/.pyenv/versions",
+  "venv": "3.12.7",
+  "pythonVersion": "3.12",
+  "extraPaths": [
+    "/Users/dshanklinbv/repos-eidos-agi/claude-session-commons"
+  ],
+  "reportMissingImports": "warning",
+  "reportAttributeAccessIssue": "warning",
+  "typeCheckingMode": "basic"
+}
