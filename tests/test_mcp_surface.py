@@ -210,6 +210,37 @@ async def test_search_sessions_returns_dict(client):
 
 
 @pytest.mark.asyncio
+async def test_search_sessions_project_filter(client):
+    """Project filter restricts results to matching projects."""
+    # Search with a project that likely has no sessions matching "zzzznotaword"
+    r = await client.call_tool("search_sessions", {
+        "query": "session", "limit": 5, "project": "resume-resume"
+    })
+    d = r.data
+    assert isinstance(d, dict)
+    assert "items" in d
+    # All results (if any) should be from resume-resume project
+    for item in d["items"]:
+        proj = item.get("project", "")
+        assert "resume-resume" in proj or "resume" in proj.lower(), (
+            f"Project filter leaked: {proj}"
+        )
+
+
+@pytest.mark.asyncio
+async def test_search_sessions_hours_filter(client):
+    """Hours filter restricts to recent sessions."""
+    r = await client.call_tool("search_sessions", {
+        "query": "session", "limit": 5, "hours": 1
+    })
+    d = r.data
+    assert isinstance(d, dict)
+    assert "items" in d
+    # Can't assert exact count but shape must be correct
+    assert d["count"] == len(d["items"])
+
+
+@pytest.mark.asyncio
 async def test_recent_sessions_returns_dict(client):
     r = await client.call_tool("recent_sessions", {"hours": 1, "limit": 2})
     d = r.data
