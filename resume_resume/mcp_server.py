@@ -163,46 +163,42 @@ def _get_title(session_id: str, session_file: Path) -> str:
     return summary.get("title", "") if isinstance(summary, dict) else ""
 
 
-def _session_health(s: dict) -> dict:
-    """Score a session's value density from file metadata alone.
+def _session_health(s: dict, cache_index: dict | None = None) -> dict:
+    """Score a session's value density from metadata + cache.
 
-    No JSONL reading — uses only stat() and cache presence. Returns a
-    dict with score (0-100) and component signals so callers can filter
-    or sort by health.
+    Uses stat() for timestamps + the bulk-loaded cache_index for summary
+    presence — no per-session file reads. Pass cache_index from
+    _get_cache_index() for batch scoring; if None, falls back to
+    per-session cache read.
 
-    Components:
-    - duration: longer interactive sessions score higher (capped at 2h)
-    - size: larger files = more messages = more work (log scale)
-    - has_summary: cached summary exists = session was worth summarizing
-    - has_title: non-empty title = session had meaningful work
-
-    Score 0-100. >60 = healthy productive session. <20 = noise/quick query.
+    Score 0-100. >60 = healthy. <20 = noise.
     """
-    f = s["file"]
     sid = s["session_id"]
     size_bytes = s.get("size", 0)
 
     # Duration from file timestamps
     dur_hours = 0.0
     try:
-        birth = f.stat().st_birthtime
+        birth = s["file"].stat().st_birthtime
         dur_hours = max(0, (s["mtime"] - birth)) / 3600
     except (OSError, AttributeError):
         pass
 
-    # Size score: log scale, 10KB=0, 100KB=0.3, 1MB=0.6, 10MB=1.0
-    import math as _math
-    size_score = min(1.0, max(0, _math.log10(max(size_bytes, 1)) - 4) / 3)
-
-    # Duration score: 0-2h maps to 0-1, capped
+    size_score = min(1.0, max(0, math.log10(max(size_bytes, 1)) - 4) / 3)
     dur_score = min(1.0, dur_hours / 2.0) if dur_hours > 0.01 else 0.0
 
-    # Has summary/title (from cache)
-    title = _get_title(sid, f)
-    has_title = bool(title and len(title) > 5)
-    has_summary = bool(_cache._read(sid).get("summary"))
+    # Check summary/title from cache_index (O(1)) instead of _cache._read (O(1) file read)
+    if cache_index is not None:
+        cached = cache_index.get(sid, {})
+        summary = cached.get("summary")
+        has_summary = isinstance(summary, dict) and bool(summary)
+        title = (summary.get("title", "") if isinstance(summary, dict) else "") or _get_title(sid, s["file"])
+    else:
+        title = _get_title(sid, s["file"])
+        has_summary = bool(_cache._read(sid).get("summary"))
 
-    # Weighted combination
+    has_title = bool(title and len(title) > 5)
+
     score = (
         0.30 * dur_score +
         0.25 * size_score +
@@ -210,11 +206,7 @@ def _session_health(s: dict) -> dict:
         0.20 * (1.0 if has_title else 0.0)
     )
 
-    return {
-        "health": round(score * 100, 0),
-        "dur_hours": round(dur_hours, 2),
-        "size_kb": round(size_bytes / 1024, 1),
-    }
+    return {"health": round(score * 100, 0)}
 
 
 def _session_row(s: dict, extra: dict | None = None) -> dict:
