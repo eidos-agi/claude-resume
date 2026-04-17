@@ -219,7 +219,8 @@ def register_self_tools(mcp_instance):
     # --- Cross-session project changelog ---
 
     @mcp_instance.tool()
-    def what_changed(project: str, hours: int = 168, limit: int = 20) -> dict:
+    def what_changed(project: str, hours: int = 168, limit: int = 20,
+                     include_automated: bool = False) -> dict:
         """What happened on a project across sessions in a time window.
 
         Synthesizes across all sessions for a project — not reading one
@@ -233,12 +234,21 @@ def register_self_tools(mcp_instance):
           project: Substring match on project path (case-insensitive).
           hours: Lookback window (default 168 = 1 week).
           limit: Max sessions to include (default 20).
+          include_automated: If False (default), skip automated sessions.
         """
-        from .mcp_server import _find_all_sessions_cached, _get_title, shorten_path
+        from .mcp_server import _find_all_sessions_cached, _get_cache_index, _get_title, shorten_path
 
         all_sessions = _find_all_sessions_cached()
         cutoff = time.time() - hours * 3600
         project_lower = project.lower()
+
+        # Filter automated sessions
+        if not include_automated:
+            cache_index = _get_cache_index()
+            all_sessions = [
+                s for s in all_sessions
+                if cache_index.get(s["session_id"], {}).get("classification") != "automated"
+            ]
 
         matched = [
             s for s in all_sessions
