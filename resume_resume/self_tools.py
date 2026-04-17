@@ -250,7 +250,7 @@ def register_self_tools(mcp_instance):
         ]
 
         # Build rows with health scores
-        rows = [_session_row(s) for s in sessions]
+        rows = [_session_row(s, cache_index=cache_index) for s in sessions]
         rows = [r for r in rows if r.get("health", 0) >= min_health]
         rows.sort(key=lambda r: r.get("health", 0), reverse=True)
 

@@ -209,9 +209,10 @@ def _session_health(s: dict, cache_index: dict | None = None) -> dict:
     return {"health": round(score * 100, 0)}
 
 
-def _session_row(s: dict, extra: dict | None = None) -> dict:
+def _session_row(s: dict, extra: dict | None = None,
+                 cache_index: dict | None = None) -> dict:
     """Standard compact session row with health score."""
-    health = _session_health(s)
+    health = _session_health(s, cache_index=cache_index)
     row = {
         "id": s["session_id"],
         "project": shorten_path(s["project_dir"]),
@@ -510,7 +511,7 @@ def search_sessions(query: str, limit: int = 10, include_automated: bool = False
             "score": final,
             "hits": total_count,
             "snippet": snippet,
-        })
+        }, cache_index=cache_index)
         for s, total_count, snippet, final in scored
     ]
 
@@ -665,7 +666,8 @@ def recent_sessions(hours: int = 24, limit: int = 10, project: str = "",
         sessions = [s for s in sessions if project_lower in s.get("project_dir", "").lower()]
 
     sessions = sessions[:limit]
-    items = [_session_row(s) for s in sessions]
+    ci = _get_cache_index() if not include_automated else None
+    items = [_session_row(s, cache_index=ci) for s in sessions]
     data = {"items": items, "count": len(items), "cached": False}
     _RECENT_SESSIONS_CACHE[cache_key] = {"data": data, "ts": now}
     return data
@@ -1896,7 +1898,7 @@ def session_thread(session_id: str) -> dict:
         s = _find_session(sid)
         if s:
             bm = all_bookmarks.get(sid)
-            row = _session_row(s)
+            row = _session_row(s)  # no cache_index — thread is small (few sessions)
             if bm:
                 row["lifecycle"] = bm.get("lifecycle_state", "")
                 ctx = bm.get("context", {})
