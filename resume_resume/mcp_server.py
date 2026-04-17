@@ -575,7 +575,8 @@ _RECENT_SESSIONS_CACHE_TTL = 10.0  # seconds — short because sessions change f
 
 
 @mcp.tool()
-def recent_sessions(hours: int = 24, limit: int = 10, project: str = "") -> dict:
+def recent_sessions(hours: int = 24, limit: int = 10, project: str = "",
+                    include_automated: bool = False) -> dict:
     """List recently active Claude Code sessions.
 
     Resume any session with: claude --resume <id>
@@ -586,22 +587,34 @@ def recent_sessions(hours: int = 24, limit: int = 10, project: str = "") -> dict
       project: If non-empty, filter to sessions in projects whose path
         contains this substring. Case-insensitive. "ciso" matches
         /Users/.../repos-aic/ciso. Default "" = all projects.
+      include_automated: If False (default), skip sessions classified as
+        "automated" by the ML classifier. Same filter as search_sessions.
 
-    Result is cached for 10 seconds per (hours, limit, project) key so
-    rapid back-to-back calls are free. Short TTL because sessions churn.
+    Result is cached for 10 seconds per (hours, limit, project, include_automated)
+    key so rapid back-to-back calls are free.
     """
     limit = max(1, min(limit, 25))
-    cache_key = (hours, limit, project.lower())
+    cache_key = (hours, limit, project.lower(), include_automated)
     now = time.time()
     cached = _RECENT_SESSIONS_CACHE.get(cache_key)
     if cached and (now - cached["ts"]) < _RECENT_SESSIONS_CACHE_TTL:
         return {**cached["data"], "cached": True, "cache_age_s": round(now - cached["ts"], 1)}
 
-    sessions = find_recent_sessions(hours, max_sessions=0 if project else limit)
+    sessions = find_recent_sessions(hours, max_sessions=0 if (project or not include_automated) else limit)
+
+    # Filter automated sessions using the ML classifier cache
+    if not include_automated:
+        cache_index = _get_cache_index()
+        sessions = [
+            s for s in sessions
+            if cache_index.get(s["session_id"], {}).get("classification") != "automated"
+        ]
+
     if project:
         project_lower = project.lower()
         sessions = [s for s in sessions if project_lower in s.get("project_dir", "").lower()]
-        sessions = sessions[:limit]
+
+    sessions = sessions[:limit]
     items = [_session_row(s) for s in sessions]
     data = {"items": items, "count": len(items), "cached": False}
     _RECENT_SESSIONS_CACHE[cache_key] = {"data": data, "ts": now}
@@ -1925,102 +1938,6 @@ try:
     register_l2_tools(mcp)
 except ImportError:
     pass
-
-
-# ---------------------------------------------------------------------------
-# Cross-session project changelog
-# ---------------------------------------------------------------------------
-
-@mcp.tool()
-def what_changed(project: str, hours: int = 168, limit: int = 20) -> dict:
-    """What happened on a project across sessions in a time window.
-
-    Synthesizes across all sessions for a project — not reading one
-    session, but producing a changelog: which sessions ran, what was
-    each about, what files were touched, what commits landed.
-
-    Use this for standup summaries, handoff context, or "what did I
-    do on X this week."
-
-    Parameters:
-      project: Substring match on project path (case-insensitive).
-        "ciso" matches /Users/.../repos-aic/ciso.
-      hours: Lookback window (default 168 = 1 week).
-      limit: Max sessions to include (default 20).
-    """
-    all_sessions = _find_all_sessions_cached()
-    cutoff = time.time() - hours * 3600
-    project_lower = project.lower()
-
-    # Filter to matching project + time window
-    matched = [
-        s for s in all_sessions
-        if project_lower in s.get("project_dir", "").lower()
-        and s["mtime"] >= cutoff
-    ]
-    matched.sort(key=lambda s: s["mtime"], reverse=True)
-    matched = matched[:limit]
-
-    if not matched:
-        return {
-            "project": project,
-            "hours": hours,
-            "sessions": 0,
-            "message": f"No sessions matching '{project}' in the last {hours} hours.",
-        }
-
-    # Build the changelog: per-session summary + git state
-    import subprocess
-
-    entries = []
-    project_path = matched[0].get("project_dir", "")
-
-    for s in matched:
-        sid = s["session_id"]
-        title = _get_title(sid, s["file"])
-        entry = {
-            "session_id": sid,
-            "date": datetime.fromtimestamp(s["mtime"]).strftime("%Y-%m-%d %H:%M"),
-            "title": title or "(no summary)",
-            "size_kb": round(s.get("size", 0) / 1024, 1),
-        }
-        entries.append(entry)
-
-    # Git log for the project in the time window
-    git_commits = []
-    if project_path and Path(project_path).is_dir():
-        try:
-            since = datetime.fromtimestamp(cutoff).strftime("%Y-%m-%d")
-            log = subprocess.run(
-                ["git", "log", f"--since={since}", "--oneline", "--format=%h %ar %s", "-20"],
-                cwd=project_path, capture_output=True, text=True, timeout=5,
-            )
-            git_commits = [line.strip() for line in log.stdout.splitlines() if line.strip()]
-        except (subprocess.TimeoutExpired, OSError):
-            pass
-
-    # Git dirty state
-    dirty_files = []
-    if project_path and Path(project_path).is_dir():
-        try:
-            status = subprocess.run(
-                ["git", "status", "--porcelain"],
-                cwd=project_path, capture_output=True, text=True, timeout=5,
-            )
-            dirty_files = [line.strip() for line in status.stdout.splitlines() if line.strip()][:15]
-        except (subprocess.TimeoutExpired, OSError):
-            pass
-
-    return {
-        "project": project,
-        "project_path": project_path,
-        "hours": hours,
-        "sessions": len(entries),
-        "changelog": entries,
-        "git_commits": git_commits,
-        "git_dirty_files": dirty_files,
-        "git_dirty_count": len(dirty_files),
-    }
 
 
 # ---------------------------------------------------------------------------
