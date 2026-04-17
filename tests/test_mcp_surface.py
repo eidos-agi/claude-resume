@@ -195,6 +195,61 @@ def test_extract_crash_context_missing_file(tmp_path):
     assert ctx["message_count"] == 0
 
 
+# ---------------------------------------------------------------------------
+# Core session tools — smoke tests (no side effects)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_search_sessions_returns_dict(client):
+    r = await client.call_tool("search_sessions", {"query": "test", "limit": 2})
+    d = r.data
+    assert isinstance(d, dict)
+    assert "items" in d
+    assert "count" in d
+    assert isinstance(d["items"], list)
+
+
+@pytest.mark.asyncio
+async def test_recent_sessions_returns_dict(client):
+    r = await client.call_tool("recent_sessions", {"hours": 1, "limit": 2})
+    d = r.data
+    assert isinstance(d, dict)
+    assert "items" in d
+    assert "count" in d
+
+
+@pytest.mark.asyncio
+async def test_read_session_with_bad_id(client):
+    r = await client.call_tool("read_session", {"session_id": "nonexistent-id"})
+    d = r.data
+    assert isinstance(d, dict)
+    assert "error" in d or "messages" in d
+
+
+@pytest.mark.asyncio
+async def test_boot_up_returns_dict(client):
+    r = await client.call_tool("boot_up", {"hours": 1})
+    d = r.data
+    assert isinstance(d, dict)
+    assert "sessions" in d or "total" in d
+
+
+@pytest.mark.asyncio
+async def test_session_summary_with_bad_id(client):
+    r = await client.call_tool("session_summary", {"session_id": "nonexistent-id"})
+    d = r.data
+    assert isinstance(d, dict)
+    assert "error" in d
+
+
+@pytest.mark.asyncio
+async def test_list_projects_returns_list_or_wrapped(client):
+    r = await client.call_tool("list_projects", {"limit": 3})
+    d = r.data
+    # list_projects may return a list (from l2_tools) or fail gracefully
+    assert isinstance(d, (list, dict))
+
+
 @pytest.mark.asyncio
 async def test_dirty_repos_shape(client):
     r = await client.call_tool("dirty_repos", {})
