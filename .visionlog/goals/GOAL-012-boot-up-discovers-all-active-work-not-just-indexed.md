@@ -2,10 +2,10 @@
 id: "GOAL-012"
 type: "goal"
 title: "boot_up discovers all active work, not just indexed sessions"
-status: "active"
+status: "complete"
 date: "2026-03-25"
 depends_on: []
 unlocks: []
 ---
 
-boot_up should scan known project directories for dirty git state (uncommitted files, recent commits) in addition to querying the session index. This closes a core reliability gap where interrupted work is invisible to boot_up if the session wasn't indexed. Dirty files and recent commits are the strongest signals of where work was happening — stronger than session metadata.
+Completed across the 71-commit self-improvement session. boot_up now discovers: crashed sessions with rich crash context (last tool, assistant msg, duration, message count), dirty repos with session cross-references, health-scored sessions, and automated session filtering. Also added suggest_next for prioritized next-action discovery across all projects.
