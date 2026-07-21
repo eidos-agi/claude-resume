@@ -113,12 +113,22 @@ def _parse_summary_file(path: Path) -> dict[str, Any] | None:
         return None
 
     meta = _session_meta(path.stem)
+    project_dir = (
+        summary.get("project_dir")
+        or data.get("project_dir")
+        or meta.get("project_dir")
+        or ""
+    )
+    # TASK-0029: never leave project_dir empty when SessionIndex / discovery
+    # can supply it. Also try a cheap filesystem resolve for Claude/Grok.
+    if not project_dir:
+        project_dir = _resolve_project_dir(path.stem) or ""
 
     return {
         "session_id": path.stem,
         "summary_path": str(path),
         "mtime": float(meta.get("mtime") or path.stat().st_mtime),
-        "project_dir": summary.get("project_dir") or meta.get("project_dir") or "",
+        "project_dir": project_dir,
         "classification": data.get("classification") or "",
         "score": float(data.get("resumability_score") or 0.0),
         "title": title,
@@ -126,6 +136,41 @@ def _parse_summary_file(path: Path) -> dict[str, Any] | None:
         "summary_json": json.dumps(summary),
         "body": body,
     }
+
+
+def _resolve_project_dir(session_id: str) -> str:
+    """Best-effort project_dir for a session id when summary meta is empty."""
+    if not session_id:
+        return ""
+    try:
+        from claude_session_commons.paths import decode_project_path
+        from claude_session_commons.discovery import PROJECTS_DIR
+    except Exception:
+        try:
+            from claude_session_commons import decode_project_path
+            from pathlib import Path as _P
+
+            PROJECTS_DIR = _P.home() / ".claude" / "projects"
+        except Exception:
+            return ""
+
+    try:
+        if not session_id.startswith("rollout-"):
+            matches = list(PROJECTS_DIR.glob(f"*/{session_id}.jsonl"))
+            if matches:
+                return decode_project_path(matches[0].parent.name)
+    except Exception:
+        pass
+
+    try:
+        from resume_resume.session_utils import find_grok_session_file
+
+        grok = find_grok_session_file(session_id)
+        if grok is not None:
+            return grok[1]
+    except Exception:
+        pass
+    return ""
 
 
 def _session_meta(session_id: str) -> dict[str, Any]:

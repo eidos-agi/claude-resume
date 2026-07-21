@@ -31,6 +31,10 @@ from claude_session_commons import decode_project_path
 from claude_session_commons.codex import (
     CODEX_SESSIONS_DIR,
     _read_codex_cwd,
+)
+from .session_utils import (
+    GROK_SESSIONS_DIR,
+    find_grok_session_file,
     session_tool,
 )
 from .summarize import summarize_quick, summarize_deep, summarize_insight, auto_tier
@@ -205,10 +209,14 @@ def _summary_valid(summary: dict) -> bool:
 def _find_session(session_id: str) -> dict | None:
     """Find a session by targeted glob — O(dirs), not O(N) sessions.
 
-    Resolves both Claude-Code sessions (~/.claude/projects/*/<uuid>.jsonl)
-    and Codex CLI sessions (~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl).
-    The codex tree is date-partitioned, so a recursive glob on the id stays
-    O(date dirs) rather than scanning every session file.
+    Resolves:
+      - Claude Code → ~/.claude/projects/*/<uuid>.jsonl
+      - Codex CLI   → ~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl
+      - Grok Build  → ~/.grok/sessions/<encoded-cwd>/<id>/chat_history.jsonl
+
+    Codex tree is date-partitioned, so a recursive glob on the id stays
+    O(date dirs) rather than scanning every session file. Grok is one-level
+    under the sessions root (TASK-0026 / MS-0002).
     """
     is_codex = bool(_CODEX_ID_RE.fullmatch(session_id))
     # Validate id format to prevent glob injection (* ? [] / etc). Only bare
@@ -218,25 +226,45 @@ def _find_session(session_id: str) -> dict | None:
 
     if is_codex:
         matches = list(CODEX_SESSIONS_DIR.glob(f"**/{session_id}.jsonl"))
-    else:
-        matches = list(PROJECTS_DIR.glob(f"*/{session_id}.jsonl"))
-    if not matches:
-        return None
-    f = matches[0]
-    stat = f.stat()
-    if is_codex:
-        # Match how scan_codex_sessions labels project_dir: the cwd recorded
-        # in the line-1 session_meta payload.
-        project_dir = _read_codex_cwd(f)
-    else:
-        project_dir = decode_project_path(f.parent.name)
-    return {
-        "file": f,
-        "session_id": session_id,
-        "project_dir": project_dir,
-        "mtime": stat.st_mtime,
-        "size": stat.st_size,
-    }
+        if not matches:
+            return None
+        f = matches[0]
+        stat = f.stat()
+        return {
+            "file": f,
+            "session_id": session_id,
+            "project_dir": _read_codex_cwd(f),
+            "mtime": stat.st_mtime,
+            "size": stat.st_size,
+        }
+
+    # Claude Code first (historical default for bare UUIDs)
+    matches = list(PROJECTS_DIR.glob(f"*/{session_id}.jsonl"))
+    if matches:
+        f = matches[0]
+        stat = f.stat()
+        return {
+            "file": f,
+            "session_id": session_id,
+            "project_dir": decode_project_path(f.parent.name),
+            "mtime": stat.st_mtime,
+            "size": stat.st_size,
+        }
+
+    # Grok Build: ~/.grok/sessions/<encoded-cwd>/<id>/chat_history.jsonl
+    grok = find_grok_session_file(session_id, grok_root=GROK_SESSIONS_DIR)
+    if grok is not None:
+        f, project_dir = grok
+        stat = f.stat()
+        return {
+            "file": f,
+            "session_id": session_id,
+            "project_dir": project_dir,
+            "mtime": stat.st_mtime,
+            "size": stat.st_size,
+        }
+
+    return None
 
 
 def _trunc(text: str, limit: int = _TRUNC) -> str:
@@ -468,25 +496,27 @@ def search_sessions(
     include_automated: bool = False,
     hours: int = 0,
     project: str = "",
+    tool: str = "",
 ) -> dict:
-    """Search Claude Code sessions by keywords.
+    """Search sessions by keywords (Claude / Codex / Grok).
 
-    Uses a two-tier search path:
-      - live scan for sessions touched in the last 30 minutes
-      - SQLite/FTS cold index for older sessions
+    Two-tier path (MS-0002 TASK-0033):
+      - hot: live scan of recently touched session files (last 30 min + fresh net)
+      - cold: SQLite/FTS summary index for older sessions
 
-    This keeps fresh crash-resume context visible without request-time scans of
-    the full session/summaries directory.
+    Both tiers always run for the full ``limit``. Results are merged and
+    deduped by session_id (prefer hot-live when both match). Hot recency no
+    longer starves cold relevance.
 
     Query syntax:
-      - Multiple words: AND logic (all must appear). "visa mastercard" finds
-        sessions containing BOTH words.
+      - Hot (live bytes): multi-word AND — every term must appear in the file.
+      - Cold (FTS summaries): multi-word OR — bm25 ranks sessions matching more
+        terms higher (tolerant recall; see search_index._fts_query).
       - Quoted phrases: exact match. '"mountain creek"' finds that exact phrase.
       - Single word: standard search.
 
-    Hot results include raw hit counts and snippets. Cold results come from the
-    summary/search-text FTS index and include source="cold-index".
-    Use read_session() to drill into a result. Resume with: claude --resume <id>
+    Hot results include raw hit counts and snippets. Cold results include
+    source="cold-index". Use read_session() to drill in.
 
     Parameters:
       include_automated: If False (default), skip sessions classified as
@@ -497,12 +527,21 @@ def search_sessions(
       project: If non-empty, filter to sessions in projects whose path
         contains this substring. Case-insensitive. "ciso" matches
         /Users/.../repos-aic/ciso. Default "" = search all projects.
+      tool: Optional host filter: "claude" | "codex" | "grok" | "" (all).
     """
     _empty = {"items": [], "count": 0}
     query = query.strip()
     if not query:
         return _empty
     limit = max(1, min(limit, 50))
+    tool_filter = (tool or "").strip().lower()
+    if tool_filter and tool_filter not in ("claude", "codex", "grok", "all"):
+        return {
+            "error": f'Invalid tool filter {tool!r}; use claude|codex|grok|all|""',
+            **_empty,
+        }
+    if tool_filter == "all":
+        tool_filter = ""
 
     # Parse query: support quoted phrases and individual terms
     phrases = re.findall(r'"([^"]+)"', query)
@@ -550,14 +589,13 @@ def search_sessions(
     p.update(f"Live scanning {len(hot_sessions)} hot sessions...", icon="search")
 
     def _check(s):
-        sid = s["session_id"]
         raw = _read_session_bytes(s)
         if raw is None:
             return None
         per_term_counts = []
         for term in terms_bytes:
             c = raw.count(term)
-            if c == 0:
+            if c == 0:  # hot path: AND — any missing term rejects
                 return None
             per_term_counts.append(c)
         total_count = sum(per_term_counts)
@@ -568,19 +606,17 @@ def search_sessions(
     from concurrent.futures import as_completed
 
     hot_matches = []
-    total = len(hot_sessions)
-    checked = 0
 
     if hot_sessions:
         with ThreadPoolExecutor(max_workers=min(8, max(1, len(hot_sessions)))) as pool:
             futures = {pool.submit(_check, s): s for s in hot_sessions}
             for future in as_completed(futures):
-                checked += 1
                 result = future.result()
                 if result is not None:
                     hot_matches.append(result)
 
     hot_matches.sort(key=lambda x: (x[1], x[0]["mtime"]), reverse=True)
+    # Keep full hot match list for merge; cap after merge with cold.
     hot_results = [
         _session_row(
             s,
@@ -591,30 +627,25 @@ def search_sessions(
                 "source": "hot-live",
             },
         )
-        for s, total_count, snippet in hot_matches[:limit]
+        for s, total_count, snippet in hot_matches
     ]
 
-    remaining = max(limit - len(hot_results), 0)
-    cold_rows = []
-    if remaining:
-        p.update("Searching cold SQLite index...", icon="working")
-        cold_rows = search_cold_index(
-            query,
-            limit=remaining,
-            include_automated=include_automated,
-            cutoff_after=cutoff,
-            cutoff_before=hot_cutoff,
-            project=project,
-        )
+    # TASK-0033: always query cold for the full limit (not remaining slots).
+    p.update("Searching cold SQLite index...", icon="working")
+    cold_rows = search_cold_index(
+        query,
+        limit=limit,
+        include_automated=include_automated,
+        cutoff_after=cutoff,
+        cutoff_before=hot_cutoff,
+        project=project,
+    )
 
-    # The live scan now reaches back further than the cold cutoff, so a fresh
-    # session can surface in both tiers. Prefer the hot-live hit and drop the
-    # cold duplicate.
     hot_ids = {r["id"] for r in hot_results}
     cold_results = []
     for row in cold_rows:
         if row["session_id"] in hot_ids:
-            continue
+            continue  # prefer hot-live when both tiers match
         cold_results.append(
             {
                 "id": row["session_id"],
@@ -622,19 +653,46 @@ def search_sessions(
                 "date": datetime.fromtimestamp(row["mtime"]).strftime("%Y-%m-%d %H:%M"),
                 "title": row.get("title") or "",
                 "health": round(float(row.get("score") or 0.0), 0),
-                "score": round(abs(float(row.get("rank") or 0.0)), 3),
+                # Invert bm25 (lower is better) into a 0–100-ish rank score for merge
+                "score": round(max(0.0, 50.0 - abs(float(row.get("rank") or 0.0))), 3),
                 "hits": None,
-                "snippet": row.get("state") or "",
+                "snippet": row.get("state") or row.get("title") or "",
                 "source": "cold-index",
             }
         )
 
-    results = hot_results + cold_results
-    for item in results:
-        item["tool"] = session_tool(item["id"])  # "claude" | "codex"
+    # Label hosts, then filter by tool BEFORE limit (TASK-0030) so tool=claude
+    # still fills the limit from cold when hot is Grok noise.
+    for item in hot_results + cold_results:
+        item["tool"] = session_tool(item["id"])  # "claude" | "codex" | "grok"
+    if tool_filter:
+        hot_results = [r for r in hot_results if r.get("tool") == tool_filter]
+        cold_results = [r for r in cold_results if r.get("tool") == tool_filter]
+
+    # TASK-0033 fair merge: reserve cold slots so hot recency cannot monopolize
+    # the full limit when cold has matches (northstar 727d811c vs Grok prompt soup).
+    hot_results.sort(
+        key=lambda r: (float(r.get("score") or 0.0), r.get("date") or ""),
+        reverse=True,
+    )
+    cold_results.sort(
+        key=lambda r: (float(r.get("score") or 0.0), r.get("date") or ""),
+        reverse=True,
+    )
+    if cold_results and hot_results:
+        cold_slots = min(len(cold_results), max(1, limit // 2))
+        hot_slots = limit - cold_slots
+        results = hot_results[:hot_slots] + cold_results[:cold_slots]
+        results.sort(
+            key=lambda r: (float(r.get("score") or 0.0), r.get("date") or ""),
+            reverse=True,
+        )
+    else:
+        results = (hot_results or cold_results)[:limit]
 
     p.update(
-        f"{len(hot_results)} hot + {len(cold_results)} indexed results", icon="done"
+        f"{len(hot_results)} hot + {len(cold_results)} cold → {len(results)} merged",
+        icon="done",
     )
 
     time.sleep(0.1)  # let socket flush before closing
@@ -645,6 +703,8 @@ def search_sessions(
         "count": len(results),
         "hot_window_minutes": int(HOT_WINDOW_SECONDS / 60),
         "cold_index": search_index_status(),
+        "hot_matches": len(hot_results),
+        "cold_matches": len(cold_results),
     }
 
 
@@ -739,10 +799,17 @@ def _read_messages(session_file: Path, keyword: str, limit: int) -> dict:
                 if entry_type not in ("user", "assistant"):
                     continue
 
-                msg = entry.get("message", {})
-                if not isinstance(msg, dict):
+                # Claude Code: content under entry.message.content
+                # Grok Build chat_history.jsonl: content on the entry itself
+                # (type=user|assistant, content=str|list) — MS-0002 TASK-0027
+                msg = entry.get("message")
+                if isinstance(msg, dict) and "content" in msg:
+                    content = msg.get("content", "")
+                elif "content" in entry:
+                    content = entry.get("content", "")
+                else:
                     continue
-                content = msg.get("content", "")
+
                 if isinstance(content, list):
                     texts = []
                     for block in content:
@@ -792,16 +859,18 @@ _RECENT_SESSIONS_CACHE_TTL = (
 
 @mcp.tool()
 def recent_sessions(
-    hours: int = 24, limit: int = 10, project: str = "", include_automated: bool = False
+    hours: int = 24,
+    limit: int = 10,
+    project: str = "",
+    include_automated: bool = False,
+    tool: str = "",
 ) -> dict:
-    """List recently active Claude Code sessions, newest first.
+    """List recently active sessions (Claude / Codex / Grok), newest first.
 
     Use this for: "show me recent sessions", "what sessions ran today".
     Use my_week instead for: "what did I work on this week" (cross-project summary).
     Use healthy_sessions instead for: "which sessions are worth resuming" (value-ranked).
     Use search_sessions instead for: keyword-based search across all sessions.
-
-    Resume any session with: claude --resume <id>
 
     Parameters:
       hours: Lookback window (default 24).
@@ -811,12 +880,23 @@ def recent_sessions(
         /Users/.../repos-aic/ciso. Default "" = all projects.
       include_automated: If False (default), skip sessions classified as
         "automated" by the ML classifier. Same filter as search_sessions.
+      tool: Optional host filter: "claude" | "codex" | "grok" | "" (all).
 
-    Result is cached for 10 seconds per (hours, limit, project, include_automated)
+    Result is cached for 10 seconds per (hours, limit, project, include_automated, tool)
     key so rapid back-to-back calls are free.
     """
     limit = max(1, min(limit, 25))
-    cache_key = (hours, limit, project.lower(), include_automated)
+    tool_filter = (tool or "").strip().lower()
+    if tool_filter == "all":
+        tool_filter = ""
+    if tool_filter and tool_filter not in ("claude", "codex", "grok"):
+        return {
+            "error": f'Invalid tool filter {tool!r}; use claude|codex|grok|all|""',
+            "items": [],
+            "count": 0,
+        }
+
+    cache_key = (hours, limit, project.lower(), include_automated, tool_filter)
     now = time.time()
     cached = _RECENT_SESSIONS_CACHE.get(cache_key)
     if cached and (now - cached["ts"]) < _RECENT_SESSIONS_CACHE_TTL:
@@ -828,7 +908,9 @@ def recent_sessions(
 
     # Fetch enough sessions to have headroom after filtering.
     # Fetching ALL sessions (max_sessions=0) is too expensive under load.
-    fetch_limit = limit * 5 if (project or not include_automated) else limit
+    fetch_limit = (
+        limit * 5 if (project or not include_automated or tool_filter) else limit
+    )
     sessions = find_recent_sessions(hours, max_sessions=fetch_limit)
 
     if not include_automated:
@@ -843,9 +925,16 @@ def recent_sessions(
             s for s in sessions if project_lower in s.get("project_dir", "").lower()
         ]
 
+    if tool_filter:
+        sessions = [
+            s for s in sessions if session_tool(s.get("session_id", "")) == tool_filter
+        ]
+
     sessions = sessions[:limit]
     ci = _get_cache_index() if not include_automated else None
     items = [_session_row(s, cache_index=ci) for s in sessions]
+    for item in items:
+        item["tool"] = session_tool(item["id"])
     data = {"items": items, "count": len(items), "cached": False}
     _RECENT_SESSIONS_CACHE[cache_key] = {"data": data, "ts": now}
     return data
