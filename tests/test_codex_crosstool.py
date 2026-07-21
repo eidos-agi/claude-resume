@@ -43,9 +43,7 @@ def test_session_tool_labels_by_source(tmp_path):
     # Same id with empty grok root → claude (path is source of truth)
     empty = tmp_path / "empty-grok"
     empty.mkdir()
-    assert (
-        session_tool(grok_id, grok_root=empty, projects_dir=empty_claude) == "claude"
-    )
+    assert session_tool(grok_id, grok_root=empty, projects_dir=empty_claude) == "claude"
 
 
 def test_read_messages_handles_codex_schema(tmp_path):

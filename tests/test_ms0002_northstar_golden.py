@@ -18,7 +18,6 @@ Anchor session id in docstrings: 727d811c-41f7-42f7-b517-ba4c525baf4e
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 from resume_resume import mcp_server as ms
 from resume_resume.session_utils import session_tool
@@ -35,9 +34,7 @@ def test_session_tool_labels_three_hosts(tmp_path):
     empty_claude.mkdir()
     assert session_tool(CODEX_ID) == "codex"
     assert (
-        session_tool(
-            NORTHSTAR_CLAUDE_ID, grok_root=tmp_path, projects_dir=empty_claude
-        )
+        session_tool(NORTHSTAR_CLAUDE_ID, grok_root=tmp_path, projects_dir=empty_claude)
         == "claude"
     )
     sess = tmp_path / "%2FUsers%2Fdemo%2Fnorthstar" / GROK_HOT_ID
@@ -75,7 +72,9 @@ def test_find_and_read_all_three_hosts(tmp_path, monkeypatch):
             {
                 "type": "assistant",
                 "message": {
-                    "content": [{"type": "text", "text": "Standing down. Chapter held."}]
+                    "content": [
+                        {"type": "text", "text": "Standing down. Chapter held."}
+                    ]
                 },
             }
         )
@@ -102,7 +101,10 @@ def test_find_and_read_all_three_hosts(tmp_path, monkeypatch):
             {
                 "type": "user",
                 "content": [
-                    {"type": "text", "text": "do you see the recent claude chat about northstar?"}
+                    {
+                        "type": "text",
+                        "text": "do you see the recent claude chat about northstar?",
+                    }
                 ],
             }
         )

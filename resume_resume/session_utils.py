@@ -114,7 +114,11 @@ def is_claude_session_id(session_id: str, *, projects_dir: Path | None = None) -
         return False
     if "/" in session_id or "\\" in session_id or ".." in session_id:
         return False
-    root = projects_dir if projects_dir is not None else Path.home() / ".claude" / "projects"
+    root = (
+        projects_dir
+        if projects_dir is not None
+        else Path.home() / ".claude" / "projects"
+    )
     try:
         if not root.is_dir():
             return False
@@ -181,9 +185,7 @@ def resume_command(
         is_codex_session_id,
     )
 
-    host = session_tool(
-        session_id, grok_root=grok_root, projects_dir=projects_dir
-    )
+    host = session_tool(session_id, grok_root=grok_root, projects_dir=projects_dir)
     if host == "codex" or is_codex_session_id(session_id):
         verb = "fork" if fork else "resume"
         return f"codex {verb} {codex_session_uuid(session_id)}"

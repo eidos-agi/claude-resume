@@ -53,6 +53,7 @@ def test_search_always_queries_cold_even_when_hot_fills_limit(tmp_path, monkeypa
     )
     monkeypatch.setattr(ms, "session_tool", lambda sid: "claude")
     monkeypatch.setattr(ms, "search_index_status", lambda: {"sessions": 1})
+
     # silence progress UI
     class _P:
         def __enter__(self):
@@ -68,14 +69,18 @@ def test_search_always_queries_cold_even_when_hot_fills_limit(tmp_path, monkeypa
 
     out = ms.search_sessions.fn("northstar", limit=5)
     assert cold_calls, "cold index must always be queried"
-    assert cold_calls[0]["limit"] == 5, "cold queried for full limit, not remaining slots"
+    assert cold_calls[0]["limit"] == 5, (
+        "cold queried for full limit, not remaining slots"
+    )
     assert out["cold_matches"] >= 1
     ids = [r["id"] for r in out["items"]]
     # Anchor 727d811c (2026-07-21 northstar failure): must SURFACE in items even when
     # hot has >= limit matches with higher recency scores (fair merge reserves cold slots).
     assert "727d811c-41f7-42f7-b517-ba4c525baf4e" in ids, ids
     cold_in_items = [r for r in out["items"] if r.get("source") == "cold-index"]
-    assert cold_in_items, "at least one cold-index row must appear when cold has matches"
+    assert cold_in_items, (
+        "at least one cold-index row must appear when cold has matches"
+    )
 
 
 def test_search_tool_filter_claude(monkeypatch):
@@ -119,6 +124,7 @@ def test_search_tool_filter_claude(monkeypatch):
             pass
 
     monkeypatch.setattr(ms, "progress", lambda *a, **k: _P())
+
     # Force tool labels without filesystem
     def fake_tool(sid):
         if sid.startswith("rollout-"):

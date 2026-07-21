@@ -537,7 +537,7 @@ def search_sessions(
     tool_filter = (tool or "").strip().lower()
     if tool_filter and tool_filter not in ("claude", "codex", "grok", "all"):
         return {
-            "error": f"Invalid tool filter {tool!r}; use claude|codex|grok|all|\"\"",
+            "error": f'Invalid tool filter {tool!r}; use claude|codex|grok|all|""',
             **_empty,
         }
     if tool_filter == "all":
@@ -654,9 +654,7 @@ def search_sessions(
                 "title": row.get("title") or "",
                 "health": round(float(row.get("score") or 0.0), 0),
                 # Invert bm25 (lower is better) into a 0–100-ish rank score for merge
-                "score": round(
-                    max(0.0, 50.0 - abs(float(row.get("rank") or 0.0))), 3
-                ),
+                "score": round(max(0.0, 50.0 - abs(float(row.get("rank") or 0.0))), 3),
                 "hits": None,
                 "snippet": row.get("state") or row.get("title") or "",
                 "source": "cold-index",
@@ -893,7 +891,7 @@ def recent_sessions(
         tool_filter = ""
     if tool_filter and tool_filter not in ("claude", "codex", "grok"):
         return {
-            "error": f"Invalid tool filter {tool!r}; use claude|codex|grok|all|\"\"",
+            "error": f'Invalid tool filter {tool!r}; use claude|codex|grok|all|""',
             "items": [],
             "count": 0,
         }
@@ -910,7 +908,9 @@ def recent_sessions(
 
     # Fetch enough sessions to have headroom after filtering.
     # Fetching ALL sessions (max_sessions=0) is too expensive under load.
-    fetch_limit = limit * 5 if (project or not include_automated or tool_filter) else limit
+    fetch_limit = (
+        limit * 5 if (project or not include_automated or tool_filter) else limit
+    )
     sessions = find_recent_sessions(hours, max_sessions=fetch_limit)
 
     if not include_automated:
@@ -927,9 +927,7 @@ def recent_sessions(
 
     if tool_filter:
         sessions = [
-            s
-            for s in sessions
-            if session_tool(s.get("session_id", "")) == tool_filter
+            s for s in sessions if session_tool(s.get("session_id", "")) == tool_filter
         ]
 
     sessions = sessions[:limit]
